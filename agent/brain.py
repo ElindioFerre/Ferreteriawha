@@ -1,5 +1,5 @@
-# agent/brain.py — El Indio HUMANO 🏹🤠🦾⚡
-import os, logging, asyncio, google.generativeai as genai
+# agent/brain.py — El Indio EDUCADO y PRUDENTE 🏹🎩🦾⚡
+import os, logging, asyncio, datetime, google.generativeai as genai
 from agent.tools import buscar_precio
 
 logger = logging.getLogger("agentkit")
@@ -10,24 +10,30 @@ LISTA_LLAVES = [k.strip() for k in raw_keys.split(",") if k.strip()]
 async def generar_respuesta(mensaje_usuario, historial):
     model_names = ["gemini-flash-latest", "gemini-1.5-flash", "gemini-pro"]
     
+    # 🏹 Detectamos si el cliente está pidiendo un PRECIO específicamente
+    pide_precio = any(w in mensaje_usuario.lower() for w in ["cuanto", "precio", "sale", "costo", "valor", "vale", "cotiz"])
+
     contexto = ""
     try:
-        # 🏹 FILTRO DE HUMANIDAD: Si el mensaje es muy corto (saludos), no buscamos nada.
-        # Solo buscamos si el mensaje tiene más de 4 letras y no es un simple saludo.
-        if len(mensaje_usuario) > 4 and mensaje_usuario.lower() not in ["hola", "buen día", "buenas"]:
+        ignorar = ["hola", "buenas", "buen dia", "hola!", "como va"]
+        if len(mensaje_usuario) > 4 and mensaje_usuario.lower().strip() not in ignorar:
             contexto = buscar_precio(mensaje_usuario)
-            # Limpiamos el contexto para que no "contamine" la respuesta con frases robóticas
-            if "no encontr" in contexto.lower(): contexto = ""
     except: pass
 
-    # 🏹 PROMPT DE "FERRETERO DE BARRIO":
+    # 🏹 REGLAS DE ETIQUETA Y PRUDENCIA
+    now = datetime.datetime.now()
+    saludo = "buenos días" if now.hour < 13 else "buenas tardes" if now.hour < 20 else "buenas noches"
+
     system_prompt = f"""
-Sos el dueño de 'Ferretería El Indio'. Hablá como una persona real, amable y experta.
-- SIEMPRE respondé de forma NATURAL (ej: "Hola, ¿cómo va?", "Qué hacés amigo, todo bien?").
-- NUNCA menciones la palabra "catálogo", "término", "búsqueda" ni "base de datos". 
-- Si no tenés un precio exacto abajo, usá tu conocimiento general de IA para ayudar.
-- HORARIOS (Solo si los piden): L-V 8-18 (Corrido), Sáb 9-14, Dom/Fer 9-13.
-- DATOS (Si hay algo útil acá, usalo): {contexto}
+Sos el asesor experto de 'Ferretería El Indio'. Tu tono es profesional, amable y humano.
+Momento actual: {saludo}.
+
+REGLAS DE ORO:
+1. SALUDO: Usá saludos naturales como "Hola", "{saludo}", "¿Cómo estás?". NUNCA digas "Fiera", "Campeón" ni frases de ese estilo.
+2. PRECIOS: SOLO mencioná el precio si el cliente lo pidió explícitamente (ej: "¿Cuánto sale?", "¿Qué precio tiene?"). Si solo pregunta por el producto, asesoralo técnicamente sin dar el precio.
+3. CÓDIGOS: NUNCA, bajo ninguna circunstancia, des los códigos de producto (ej: 'AL105'). Usá solo el nombre del producto.
+4. NUNCA digas "catálogo" o "base de datos".
+5. DATOS (Usalos solo según las reglas anteriores): {contexto if contexto else "No hay datos específicos, asesorá con tu conocimiento general de ferretería."}
 """.strip()
 
     for api_key in LISTA_LLAVES:
@@ -36,10 +42,10 @@ Sos el dueño de 'Ferretería El Indio'. Hablá como una persona real, amable y 
             for name in model_names:
                 try:
                     model = genai.GenerativeModel(name)
-                    response = await model.generate_content_async(f"{system_prompt}\n\nhistorial: {historial}\n\nCliente: {mensaje_usuario}")
+                    response = await model.generate_content_async(f"{system_prompt}\n\nCliente: {mensaje_usuario}")
                     if response and hasattr(response, 'text') and response.text:
                         return response.text
                 except: continue
         except: continue
 
-    return "¡Hola! ¿Cómo andás? Decime qué andás necesitando para el hogar o la obra."
+    return f"¡Hola, {saludo}! ¿Cómo te puedo ayudar hoy con tu proyecto?"
