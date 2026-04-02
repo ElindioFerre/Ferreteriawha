@@ -1,51 +1,47 @@
 import os
 import httpx
+from agent.tools import buscar_precio
 
 async def generar_respuesta(mensaje_usuario, historial):
-    # La llave mágica que pusiste en Railway
     api_key = os.getenv("GOOGLE_API_KEY")
-    # Modelo Lite: Es el más rápido y el que tiene cuota libre de tu lista
-    model_name = "gemini-2.0-flash-lite-001" 
-    
-    # URL directa de Google (Súper rápida)
+    # MODELO ILIMITADO SEGÚN TU CONSOLA
+    model_name = "gemini-3.0-flash-live-preview" 
     url = f"https://generativelanguage.googleapis.com/v1beta/models/{model_name}:generateContent?key={api_key}"
     
-    # Instrucciones de la personalidad del Indio
-    sistema = """
-Eres el asistente virtual de 'Ferretería El Indio'. Tu nombre es 'Indio'. 
-Atiendes por WhatsApp con un tono amable, profesional pero también cercano y algo rústico.
-Tu objetivo es ayudar a los clientes con precios, stock y consultas técnicas simples.
-Si no sabes algo, dile que pueden pasar por el local.
-    """.strip()
+    # 🔍 Búsqueda de precios antes de hablar
+    palabras_precio = ['cuanto', 'precio', 'vale', 'tenes', 'costo', 'presupuesto', 'hay']
+    contexto_precios = ""
+    if any(p in mensaje_usuario.lower() for p in palabras_precio) or len(mensaje_usuario.split()) < 4:
+        contexto_precios = buscar_precio(mensaje_usuario)
+
+    # 🏹 El Espíritu del Indio
+    sistema = f"""
+Eres 'Indio', el asistente rústico de 'Ferretería El Indio'.
+IMPORTANTE:
+- Si el catálogo tiene el precio, dáselo al cliente.
+- Si no está, pídele medidas o marca para buscar mejor.
+- Sé servicial pero directo, como un ferretero de confianza.
+
+DATOS DEL CATÁLOGO ACTUAL:
+{contexto_precios}
+""".strip()
     
-    # Formateamos los datos para enviárselos a Google
     datos = {
         "contents": [{
-            "parts": [{"text": f"INSTRUCCIONES DE IDENTIDAD:\n{sistema}\n\nMENSAJE DEL CLIENTE: {mensaje_usuario}"}]
-        }],
-        "generationConfig": {
-            "temperature": 0.7,
-            "maxOutputTokens": 800,
-        }
+            "parts": [{"text": f"SISTEMA:\n{sistema}\n\nUSUARIO: {mensaje_usuario}"}]
+        }]
     }
 
     try:
         async with httpx.AsyncClient() as client:
-            # Llamamos a la API de Google por cable directo (httpx)
             response = await client.post(url, json=datos, timeout=30.0)
             
+            # Si el modelo "live" no responde por REST, el bot nos avisará
             if response.status_code == 200:
-                res_json = response.json()
-                # Extraemos la respuesta inteligente de la IA
-                texto = res_json['candidates'][0]['content']['parts'][0]['text']
-                return texto
-            elif response.status_code == 429:
-                return "Che, estoy a mil ahora mismo... ¿Me aguantás un minutito y me preguntás de nuevo? ¡Gracias!"
-            else:
-                # Si hay otro error, te lo mostramos para saber qué pasa
-                return f"ALERTA INDIO ({response.status_code}): {response.text[:100]}"
-                
+                return response.json()['candidates'][0]['content']['parts'][0]['text']
+            
+            # Si tira 404 (modelo no encontrado), avisame y probamos con 'gemini-3-flash-preview'
+            return f"Che, el modelo {model_name} tiró error {response.status_code}. ¿Lo cambiamos?"
+            
     except Exception as e:
-        # Error de red o algo raro
-        print(f"Error crítico: {e}")
-        return "¡Uy! Se me cortó la señal en el depósito... ¿Probamos de nuevo?"
+        return f"Se me cortó el cable: {str(e)[:50]}"
