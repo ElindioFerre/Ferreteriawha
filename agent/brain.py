@@ -1,4 +1,4 @@
-# agent/brain.py — Versión con LLAVE NUEVA 🏹🦾🔓
+# agent/brain.py — Versión ASYNC TOTAL 🏹🦾⚡
 import os, logging, asyncio, google.generativeai as genai
 from agent.tools import buscar_precio
 
@@ -6,7 +6,6 @@ logger = logging.getLogger("agentkit")
 genai.configure(api_key=os.getenv("GOOGLE_API_KEY"))
 
 async def generar_respuesta(mensaje_usuario, historial):
-    # 🏹 VOLVEMOS AL ESTÁNDAR (Como es cuenta nueva, estos son los que vuelan)
     model_names = ["gemini-1.5-flash", "gemini-pro"]
     
     contexto = ""
@@ -15,32 +14,29 @@ async def generar_respuesta(mensaje_usuario, historial):
             contexto = buscar_precio(mensaje_usuario)
     except: pass
 
-    # Reforzamos los horarios a tope
-    system_prompt = f"""
-SABER IMPORTANTE (RESPONDER SIEMPRE ESTO SI PREGUNTAN):
-- HORARIOS: Lunes a Viernes de 8:00 a 18:00 (horario corrido), Sábados de 9:00 a 14:00, Domingos y Feriados de 9:00 a 13:00.
-- LUGAR: Ferretería El Indio.
-- PERSONALIDAD: Amable, servicial, usá 'Hola' o 'Amigo'.
-- PRODUCTOS ENCONTRADOS: {contexto}
-""".strip()
-
+    system_prompt = f"Eres el asistente de Ferretería El Indio. Horarios: L-V 8-18, Sab 9-14, Dom 9-13. Datos: {contexto}"
+    
     for name in model_names:
         intentos = 0
-        while intentos < 3:
+        while intentos < 2: 
             try:
-                # logger.info(f"Probando modelo estándar {name} con llave nueva...")
+                logger.info(f"🤖 IA pensando con {name}...")
                 model = genai.GenerativeModel(name)
-                # Nota: generate_content es síncorno en el SDK de google-generativeai
-                response = model.generate_content(f"{system_prompt}\n\nCliente: {mensaje_usuario}")
+                
+                # 🏹 LLAMADA ASINCRÓNICA REAL
+                response = await model.generate_content_async(f"{system_prompt}\n\nCliente: {mensaje_usuario}")
                 
                 if response and hasattr(response, 'text') and response.text:
-                    logger.info(f"✅ ¡ÉXITO TOTAL con {name}!")
+                    logger.info(f"✅ IA respondió con {name}")
                     return response.text
                     
             except Exception as e:
-                error_msg = str(e).lower()
-                if "429" in error_msg or "quota" in error_msg:
-                    logger.warning(f"⚠️ Google saturado ({name}), reintentando en 2.5s...")
-                    await asyncio.sleep(2.5)
+                if "429" in str(e):
+                    logger.warning(f"⚠️ Cuota agotada, esperando 3s...")
+                    await asyncio.sleep(3)
                     intentos += 1
                     continue
+                logger.error(f"❌ Error IA ({name}): {e}")
+                break
+
+    return "¡Hola amigo! Dame un toque que estoy buscando el catálogo. ¿Qué necesitabas?"
