@@ -9,7 +9,7 @@ def cargar_config():
         prompts = yaml.safe_load(f)
     return prompts
 
-async def generar_respuesta(telefono, mensaje_usuario, historial):
+async def generar_respuesta(mensaje_usuario, historial):
     client = genai.Client(api_key=os.getenv("GOOGLE_API_KEY"))
     prompts = cargar_config()
     
@@ -18,6 +18,7 @@ async def generar_respuesta(telefono, mensaje_usuario, historial):
     
     # Filtramos el historial para que la IA entienda
     contents = []
+    # El historial viene del main.py ordenado del más viejo al más nuevo
     for h in historial:
         role = "user" if h["role"] == "user" else "model"
         contents.append(types.Content(role=role, parts=[types.Part.from_text(text=h["content"])]))
@@ -51,4 +52,3 @@ async def generar_respuesta(telefono, mensaje_usuario, historial):
         except Exception as e2:
             print(f"Error crítico en IA: {e2}")
             return "Lo siento, el Indio está un poco distraído ahora mismo... ¿Podés repetirme tu consulta en un minuto?"
-
