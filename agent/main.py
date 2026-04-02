@@ -1,7 +1,7 @@
-# agent/main.py — Ajuste de orden de envío 🏹
+# agent/main.py — Servidor Estable para Whapi 🏹
 import os, logging
 from contextlib import asynccontextmanager
-from fastapi import FastAPI, Request, HTTPException, BackgroundTasks
+from fastapi import FastAPI, Request, BackgroundTasks
 from fastapi.responses import PlainTextResponse
 from dotenv import load_dotenv
 from agent.brain import generar_respuesta
@@ -16,26 +16,14 @@ proveedor = obtener_proveedor()
 async def procesar_mensaje_async(msg):
     try:
         if msg.es_propio or not msg.texto: return
-        
-        # 1. Buscamos historial
         historial = await obtener_historial(msg.telefono)
-        
-        # 2. Le pedimos la respuesta a la IA (ESTO YA FUNCIONA ✅)
         respuesta = await generar_respuesta(msg.texto, historial)
-        
-        # 3. ENVIAMOS PRIMERO (Prioridad máxima) 🚀
         enviado = await proveedor.enviar_mensaje(msg.telefono, respuesta)
-        
         if enviado:
-            logger.info(f"Respuesta enviada a {msg.telefono}")
-            # 4. Guardamos todo recién cuando sabemos que salió
             await guardar_mensaje(msg.telefono, "user", msg.texto)
             await guardar_mensaje(msg.telefono, "assistant", respuesta)
-        else:
-            logger.error(f"Whapi rechazó el mensaje para {msg.telefono}")
-            
     except Exception as e:
-        logger.error(f"Error crítico en proceso: {e}", exc_info=True)
+        logger.error(f"Error: {e}")
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
