@@ -1,41 +1,24 @@
-# agent/main.py — Arreglo del Bucle Infinito 🔄🚫
-import logging
-from fastapi import FastAPI, Request, BackgroundTasks
-from agent.brain import generar_respuesta
-from agent.providers.whapi import ProveedorWhapi
-
-app = FastAPI()
-whapi = ProveedorWhapi()
-
-async def procesar_mensaje_async(msg):
-    # 🏹 REGLA DE ORO: Ignorar si el mensaje lo mandó el bot
-    if msg.get('from_me') is True:
-        return 
-
-    chat_id = msg.get('chat_id')
-    texto = msg.get('text', {}).get('body', '')
-    
-    if not chat_id or not texto:
-        return
-
-    # Generamos la IA
-    respuesta = await generar_respuesta(texto, [])
-    
-    # Enviamos
-    await whapi.enviar_mensaje(chat_id, respuesta)
-
+# agent/main.py — Súper Logging 🏹🛰️
 @app.post("/webhook")
 async def webhook_post(request: Request, background_tasks: BackgroundTasks):
     try:
         data = await request.json()
-        mensajes = data.get('messages', [])
+        logger.info(f"📥 WEBHOOK RECIBIDO: {data.keys()}") # <--- LOG CLAVE
         
+        mensajes = await proveedor.parsear_webhook(request)
+        if not mensajes:
+            logger.info("ℹ️ Webhook sin mensajes (posible status o confirmación).")
+            return {"status": "ok"}
+
         for msg in mensajes:
-            # 🏹 Filtro de seguridad también aquí
-            if not msg.get('from_me'):
-                background_tasks.add_task(procesar_mensaje_async, msg)
-                
-    except Exception as e:
-        logging.error(f"Error webhook: {e}")
+            logger.info(f"💬 Mensaje detectado de {msg.telefono}. Propio? {msg.es_propio}")
+            if msg.es_propio or not msg.texto:
+                continue
+            
+            logger.info(f"🚀 Disparando procesamiento para: {msg.texto[:20]}...")
+            background_tasks.add_task(procesar_mensaje_async, msg)
         
-    return {"status": "accepted"}
+        return {"status": "accepted"}
+    except Exception as e:
+        logger.error(f"❌ ERROR WEBHOOK: {e}", exc_info=True)
+        return {"status": "error"}
