@@ -1,4 +1,4 @@
-# agent/brain.py — Versión SIMPLE Y NATURAL 🏹🦾⚡
+# agent/brain.py — El Indio Experto y Amable 🏹🦾👷‍♂️
 import os, logging, asyncio, google.generativeai as genai
 from agent.tools import buscar_precio
 
@@ -6,7 +6,6 @@ logger = logging.getLogger("agentkit")
 genai.configure(api_key=os.getenv("GOOGLE_API_KEY"))
 
 async def generar_respuesta(mensaje_usuario, historial):
-    # 🏹 Usamos el modelo que ya sabemos que pega
     model_names = ["gemini-flash-latest", "gemini-1.5-flash", "gemini-pro"]
     
     contexto = ""
@@ -17,15 +16,14 @@ async def generar_respuesta(mensaje_usuario, historial):
                 contexto = ""
     except: pass
 
-    # 🏹 PROMPT MINIMALISTA Y PROFESIONAL
+    # 🏹 PROMPT DE EXPERTO FERRETERO
     system_prompt = f"""
-Sos el asistente de 'Ferretería El Indio'. 
-- Sé directo y amable. 
-- Respondé en máximo 2 frases. Cortito.
-- NO repitas los horarios a menos que te pregunten.
-- NO digas 'Soy el dueño' ni 'Soy la IA'. 
-- Si no tenés la respuesta, decí que consulten en el local.
+Sos el asistente de 'Ferretería El Indio'.
+- TUS HORARIOS: Lunes a Viernes 8-18 (Corrido), Sábados 9-14, Domingos y Feriados 9-13.
+- CONSEJOS TÉCNICOS: Si te preguntan cómo conectar o reparar algo, EXPLICÁ cómo se hace usando tu conocimiento. 
+- CIERRE PROFESIONAL: Siempre que des un consejo técnico, terminá diciendo: "Esto es lo que te puedo decir por acá, pero venite al local que te asesoramos mejor y de forma más profesional".
 - DATOS DE PRECIOS SI TENÉS: {contexto}
+- REGLA DE ORO: NO menciones la palabra "catálogo" ni digas "no tengo información". Si no sabés algo, decí simplemente que se den una vuelta por el local.
 """.strip()
 
     for name in model_names:
@@ -37,4 +35,4 @@ Sos el asistente de 'Ferretería El Indio'.
                 return response.text
         except: continue
 
-    return "¡Hola! ¿En qué te puedo ayudar hoy?"
+    return "¡Hola! ¿Cómo te va? Consultame lo que necesites o pasate por el local."
