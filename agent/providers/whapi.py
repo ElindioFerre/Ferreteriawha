@@ -1,58 +1,55 @@
-# agent/providers/whapi.py — Blindaje Nivel Industrial 🛡️🦾
-import os, logging, httpx
-from fastapi import Request
-from agent.providers.base import ProveedorWhatsApp, MensajeEntrante
+# agent/providers/whapi.py — Versión Flex 🏹🌀
+import os, httpx, logging
 
 logger = logging.getLogger("agentkit")
 
-class ProveedorWhapi(ProveedorWhatsApp):
+class MensajeWhapi:
+    def __init__(self, telefono, texto, id_mensaje, es_propio=False):
+        self.telefono = telefono
+        self.texto = texto
+        self.id_mensaje = id_mensaje
+        self.es_propio = es_propio
+
+class ProveedorWhapi:
     def __init__(self):
+        self.url_base = "https://gate.whapi.cloud"
         self.token = os.getenv("WHAPI_TOKEN")
-        self.url_envio = "https://gate.whapi.cloud/messages/text"
 
-    async def parsear_webhook(self, request: Request) -> list[MensajeEntrante]:
+    async def validar_webhook(self, request):
+        return "ok"
+
+    async def parsear_webhook(self, request=None, raw_body=None):
         try:
-            body = await request.json()
-            mensajes = []
+            # 🏹 Si ya tenemos los datos parseados, los usamos
+            datos = raw_body if raw_body else await request.json()
             
-            for msg in body.get("messages", []):
-                chat_id = msg.get("chat_id") or msg.get("to") or ""
+            mensajes_obj = []
+            if "messages" not in datos: return []
+            
+            for m in datos["messages"]:
+                tipo = m.get("type", "text")
+                if tipo != "text": continue
                 
-                # 🏹 DETECCIÓN MULTI-CAPA
-                # 1. Por banderas de Whapi
-                es_propio = msg.get("from_me") or msg.get("fromMe") or msg.get("out") or False
+                texto = m.get("text", {}).get("body", "")
+                de_mi = m.get("from_me", False)
+                chat_id = m.get("chat_id", "")
+                msg_id = m.get("id", "")
                 
-                # 2. Por contenido del mensaje (Corta-bucle de emergencia)
-                texto_body = ""
-                if isinstance(msg.get("text"), dict):
-                    texto_body = msg.get("text", {}).get("body", "").strip()
-                
-                # Si el mensaje dice "Aguantame un toque", es el bot. Punto.
-                if "Aguantame un toque" in texto_body or "Dame un minutito" in texto_body:
-                    es_propio = True
-
-                if es_propio:
-                    logger.info(f"🚫 [BUCLE EVITADO] Ignorando mensaje propio ID: {msg.get('id')}")
-
-                mensajes.append(MensajeEntrante(
-                    telefono=chat_id,
-                    texto=texto_body,
-                    mensaje_id=msg.get("id", ""),
-                    es_propio=es_propio,
-                ))
-            return mensajes
+                mensajes_obj.append(MensajeWhapi(chat_id, texto, msg_id, de_mi))
+            return mensajes_obj
         except Exception as e:
             logger.error(f"Error parseando Whapi: {e}")
             return []
 
-    async def enviar_mensaje(self, telefono: str, mensaje: str) -> bool:
-        if not self.token: return False
-        headers = {"Authorization": f"Bearer {self.token}", "Content-Type": "application/json"}
-        payload = {"to": telefono, "body": mensaje, "typing_time": 0}
+    async def enviar_mensaje(self, telefono, texto):
         try:
-            async with httpx.AsyncClient(timeout=30.0) as client:
-                r = await client.post(self.url_envio, json=payload, headers=headers)
-                return r.status_code in [200, 201]
+            url = f"{self.url_base}/messages/text"
+            payload = {"to": telefono, "body": texto}
+            headers = {"Authorization": f"Bearer {self.token}", "Content-Type": "application/json"}
+            
+            async with httpx.AsyncClient() as client:
+                resp = await client.post(url, json=payload, headers=headers)
+                return resp.status_code == 200
         except Exception as e:
-            logger.error(f"Error red: {e}")
+            logger.error(f"Error enviando: {e}")
             return False
