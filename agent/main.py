@@ -1,5 +1,6 @@
-# agent/main.py — El Corazón del Indio 🏹❤️
+# agent/main.py — El Corazón del Indio (Con Espionaje) 🏹🕵️‍♂️
 import os, logging
+import google.generativeai as genai
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request, HTTPException, BackgroundTasks
 from fastapi.responses import PlainTextResponse
@@ -20,16 +21,12 @@ proveedor = obtener_proveedor()
 # 3. Lógica de Procesamiento Asíncrono
 async def procesar_mensaje_async(msg):
     try:
-        # 🏹 FILTRO DE SEGURIDAD (Si es nuestro o está vacío, no hacemos nada)
         if msg.es_propio or not msg.texto: return
         
         logger.info(f"🚀 PROCESANDO MENSAJE de {msg.telefono}")
         historial = await obtener_historial(msg.telefono)
         
-        # Le pedimos la respuesta a la IA
         respuesta = await generar_respuesta(msg.texto, historial)
-        
-        # Enviamos la respuesta al cliente
         enviado = await proveedor.enviar_mensaje(msg.telefono, respuesta)
         
         if enviado:
@@ -46,6 +43,15 @@ async def procesar_mensaje_async(msg):
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     await inicializar_db()
+    
+    # 🕵️‍♂️ ESPIONAJE DE MODELOS
+    try:
+        genai.configure(api_key=os.getenv("GOOGLE_API_KEY"))
+        available_models = [m.name for m in genai.list_models()]
+        logger.info(f"🔍 MODELOS DISPONIBLES EN TU CUENTA: {available_models}")
+    except Exception as e:
+        logger.error(f"❌ No pude listar los modelos: {e}")
+
     logger.info("📡 BASE DE DATOS Y AGENTE INICIALIZADOS")
     yield
 
