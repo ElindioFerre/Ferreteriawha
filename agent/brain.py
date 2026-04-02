@@ -1,31 +1,37 @@
 import os
-import google.generativeai as genai
+import httpx
 
 async def generar_respuesta(mensaje_usuario, historial):
     api_key = os.getenv("GOOGLE_API_KEY")
-    genai.configure(api_key=api_key)
+    # Usamos el modelo 2.0 que confirmamos que tenés en tu lista
+    model_name = "gemini-2.0-flash" 
     
-    # Usamos el modelo 2.0 que tenés disponible
-    model = genai.GenerativeModel('gemini-2.0-flash')
+    # El "cable directo" a Google
+    url = f"https://generativelanguage.googleapis.com/v1beta/models/{model_name}:generateContent?key={api_key}"
     
-    # Instrucciones súper claras para el Indio
-    sistema = """
-Eres el asistente virtual de 'Ferretería El Indio'. Tu nombre es 'Indio'. 
-Atiendes por WhatsApp con un tono amable, profesional pero también cercano y algo rústico.
-Tu objetivo es ayudar a los clientes con precios, stock y consultas técnicas simples.
-Si no sabes algo, diles que pueden pasar por el local.
-    """.strip()
+    # Instrucciones del Indio
+    sistema = "Eres el asistente de Ferretería El Indio. Hablas con tono amable y experto."
     
+    # Preparamos el paquete de datos
+    datos = {
+        "contents": [{
+            "parts": [{"text": f"INSTRUCCIONES: {sistema}\n\nMENSAJE CLIENTE: {mensaje_usuario}"}]
+        }]
+    }
+
     try:
-        # Iniciamos el chat con el sistema de instrucciones
-        chat = model.start_chat()
-        
-        # Le mandamos el contexto y el mensaje del cliente
-        prompt = f"INSTRUCCIONES DE IDENTIDAD:\n{sistema}\n\nMENSAJE DEL CLIENTE: {mensaje_usuario}"
-        response = chat.send_message(prompt)
-        
-        return response.text
-        
+        async with httpx.AsyncClient() as client:
+            # Mandamos el mensaje directo a los servidores de Google
+            response = await client.post(url, json=datos, timeout=30.0)
+            
+            if response.status_code == 200:
+                res_json = response.json()
+                # Sacamos el texto de la respuesta
+                texto = res_json['candidates'][0]['content']['parts'][0]['text']
+                return texto
+            else:
+                # Si Google nos dice que no por algo, te lo avisamos por WhatsApp
+                return f"ERROR GOOGLE DIRECTO ({response.status_code}): {response.text[:100]}"
+                
     except Exception as e:
-        print(f"Error en IA: {e}")
-        return "Lo siento, el Indio está buscando una llave inglesa y no te escuchó bien... ¿Podés repetirlo?"
+        return f"ERROR DE CONEXIÓN: {str(e)}"
