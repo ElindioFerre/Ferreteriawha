@@ -1,0 +1,27 @@
+﻿# config/business.yaml — Generado por AgentKit
+negocio:
+  nombre: "Ferreteria El Indio"
+  descripcion: |
+    Ferreteria de barrio completa. Vendemos todo tipo de productos: desde
+    tornillos y bulones hasta maquinas electricas y a nafta. Trabajamos con
+    las mejores marcas como Total y Omaha. Tenemos cortadoras de pasto
+    electricas y a nafta, herramientas manuales y electricas, materiales de
+    construccion, plomeria, electricidad, pinturas, adhesivos, cerraduras e
+    iluminacion. Nuestros clientes son gente de barrio trabajadora a quienes
+    tratamos como amigos.
+  horario: "Lunes a Viernes 8:00 a 18:00 | Sabados 9:00 a 14:00 | Domingos y feriados 9:00 a 13:00"
+  moneda: "ARS"
+
+agente:
+  nombre: "Ferreteria El Indio Agent"
+  tono: "profesional, formal y amigable"
+  casos_de_uso:
+    - "Responder preguntas frecuentes (horarios, ubicacion, envios, garantias)"
+    - "Tomar pedidos de productos"
+    - "Soporte post-venta"
+    - "Consulta de precios del catalogo y gestor de precios"
+    - "Asesoramiento tecnico sobre herramientas y maquinas"
+
+metadata:
+  creado: "2026-04-02"
+  version: "1.0"
