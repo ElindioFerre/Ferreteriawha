@@ -1,51 +1,41 @@
-# agent/main.py — Servidor Estable para Whapi 🏹
-import os, logging
-from contextlib import asynccontextmanager
+# agent/main.py — Arreglo del Bucle Infinito 🔄🚫
+import logging
 from fastapi import FastAPI, Request, BackgroundTasks
-from fastapi.responses import PlainTextResponse
-from dotenv import load_dotenv
 from agent.brain import generar_respuesta
-from agent.memory import inicializar_db, guardar_mensaje, obtener_historial
-from agent.providers import obtener_proveedor
+from agent.providers.whapi import ProveedorWhapi
 
-load_dotenv()
-logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(name)s: %(message)s")
-logger = logging.getLogger("agentkit")
-proveedor = obtener_proveedor()
+app = FastAPI()
+whapi = ProveedorWhapi()
 
 async def procesar_mensaje_async(msg):
-    try:
-        if msg.es_propio or not msg.texto: return
-        historial = await obtener_historial(msg.telefono)
-        respuesta = await generar_respuesta(msg.texto, historial)
-        enviado = await proveedor.enviar_mensaje(msg.telefono, respuesta)
-        if enviado:
-            await guardar_mensaje(msg.telefono, "user", msg.texto)
-            await guardar_mensaje(msg.telefono, "assistant", respuesta)
-    except Exception as e:
-        logger.error(f"Error: {e}")
+    # 🏹 REGLA DE ORO: Ignorar si el mensaje lo mandó el bot
+    if msg.get('from_me') is True:
+        return 
 
-@asynccontextmanager
-async def lifespan(app: FastAPI):
-    await inicializar_db()
-    yield
+    chat_id = msg.get('chat_id')
+    texto = msg.get('text', {}).get('body', '')
+    
+    if not chat_id or not texto:
+        return
 
-app = FastAPI(title="Ferreteria El Indio", lifespan=lifespan)
-
-@app.get("/")
-async def health(): return {"status": "ok"}
-
-@app.get("/webhook")
-async def webhook_get(request: Request):
-    res = await proveedor.validar_webhook(request)
-    return PlainTextResponse(str(res)) if res else {"status": "ok"}
+    # Generamos la IA
+    respuesta = await generar_respuesta(texto, [])
+    
+    # Enviamos
+    await whapi.enviar_mensaje(chat_id, respuesta)
 
 @app.post("/webhook")
 async def webhook_post(request: Request, background_tasks: BackgroundTasks):
     try:
-        mensajes = await proveedor.parsear_webhook(request)
+        data = await request.json()
+        mensajes = data.get('messages', [])
+        
         for msg in mensajes:
-            background_tasks.add_task(procesar_mensaje_async, msg)
-        return {"status": "accepted"}
+            # 🏹 Filtro de seguridad también aquí
+            if not msg.get('from_me'):
+                background_tasks.add_task(procesar_mensaje_async, msg)
+                
     except Exception as e:
-        return {"status": "error", "detail": str(e)}
+        logging.error(f"Error webhook: {e}")
+        
+    return {"status": "accepted"}
