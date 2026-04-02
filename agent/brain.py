@@ -1,4 +1,4 @@
-# agent/brain.py — Con Detector de Errores 🕵️‍♂️🏹🦾
+# agent/brain.py — Superando el 429 de Google 🏹🦾🛡️
 import os, logging, asyncio, google.generativeai as genai
 from agent.tools import buscar_precio
 
@@ -6,7 +6,13 @@ logger = logging.getLogger("agentkit")
 genai.configure(api_key=os.getenv("GOOGLE_API_KEY"))
 
 async def generar_respuesta(mensaje_usuario, historial):
-    model_names = ["gemini-flash-latest", "gemini-1.5-flash", "gemini-pro"]
+    # 🏹 Agregamos el "8b" que es más ligero y suele tener cuota propia
+    model_names = [
+        "gemini-1.5-flash",
+        "gemini-1.5-flash-8b", 
+        "gemini-flash-latest",
+        "gemini-pro"
+    ]
     
     contexto = ""
     try:
@@ -16,19 +22,25 @@ async def generar_respuesta(mensaje_usuario, historial):
                 contexto = ""
     except: pass
 
-    system_prompt = f""" Sos el asistente de 'Ferretería El Indio'. Horarios: Lunes a Viernes 8-18 (Corrido), Sábados 9-14, Domingos y Feriados 9-13. Si te preguntan cómo hacer algo, explicá y sugerí venir al local para asesoría profesional. Datos: {contexto} """.strip()
+    system_prompt = f"Sos el asistente de 'Ferretería El Indio'. Horarios: L-V 8-18, Sáb 9-14, Dom/Fer 9-13. Datos: {contexto}"
 
     for name in model_names:
-        try:
-            model = genai.GenerativeModel(name)
-            response = await model.generate_content_async(f"{system_prompt}\n\nCliente: {mensaje_usuario}")
-            
-            if response and hasattr(response, 'text') and response.text:
-                return response.text
+        intentos = 0
+        while intentos < 2:
+            try:
+                model = genai.GenerativeModel(name)
+                response = await model.generate_content_async(f"{system_prompt}\n\nCliente: {mensaje_usuario}")
                 
-        except Exception as e:
-            # 👁️ ESTO NOS VA A DECIR POR QUÉ FALLA
-            logger.error(f"❌ Error CRÍTICO en {name}: {e}")
-            continue
+                if response and hasattr(response, 'text') and response.text:
+                    return response.text
+                    
+            except Exception as e:
+                error_str = str(e)
+                if "429" in error_str:
+                    logger.warning(f"⚠️ {name} sin cuota, esperando 5 segundos...")
+                    await asyncio.sleep(5) # 🏹 Espera un poco más para que Google se calme
+                    intentos += 1
+                    continue
+                break # Si es otro error (como 404), saltá al siguiente modelo
 
-    return "¡Hola! ¿Cómo va? Consultame lo que necesites o pasate por el local. (IA temporalmente ocupada)"
+    return "¡Hola! Dame un segundito que el sistema está un poco lento. ¿Qué andás necesitando?"
