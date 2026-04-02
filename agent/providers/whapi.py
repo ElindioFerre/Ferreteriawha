@@ -1,4 +1,4 @@
-﻿# agent/providers/whapi.py — Adaptador para Whapi.cloud
+# agent/providers/whapi.py — Adaptador para Whapi.cloud 🏹
 import os, logging, httpx
 from fastapi import Request
 from agent.providers.base import ProveedorWhatsApp, MensajeEntrante
@@ -11,24 +11,25 @@ class ProveedorWhapi(ProveedorWhatsApp):
         self.url_envio = "https://gate.whapi.cloud/messages/text"
 
     async def parsear_webhook(self, request: Request) -> list[MensajeEntrante]:
-        body = await request.json()
-        mensajes = []
-        for msg in body.get("messages", []):
-            mensajes.append(MensajeEntrante(
-                telefono=msg.get("chat_id", ""),
-                texto=msg.get("text", {}).get("body", ""),
-                mensaje_id=msg.get("id", ""),
-                es_propio=msg.get("from_me", False),
-            ))
-        return mensajes
+        try:
+            body = await request.json()
+            mensajes = []
+            for msg in body.get("messages", []):
+                mensajes.append(MensajeEntrante(
+                    telefono=msg.get("chat_id", ""),
+                    texto=msg.get("text", {}).get("body", "") if isinstance(msg.get("text"), dict) else "",
+                    mensaje_id=msg.get("id", ""),
+                    es_propio=msg.get("from_me", False),
+                ))
+            return mensajes
+        except: return []
 
     async def enviar_mensaje(self, telefono: str, mensaje: str) -> bool:
-        if not self.token:
-            logger.warning("WHAPI_TOKEN no configurado")
-            return False
+        if not self.token: return False
         headers = {"Authorization": f"Bearer {self.token}", "Content-Type": "application/json"}
-        async with httpx.AsyncClient() as client:
-            r = await client.post(self.url_envio, json={"to": telefono, "body": mensaje}, headers=headers)
-            if r.status_code != 200:
-                logger.error(f"Error Whapi: {r.status_code} - {r.text}")
-            return r.status_code == 200
+        payload = {"to": telefono, "body": mensaje}
+        try:
+            async with httpx.AsyncClient(timeout=30.0) as client:
+                r = await client.post(self.url_envio, json=payload, headers=headers)
+                return r.status_code in [200, 201]
+        except: return False
