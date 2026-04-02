@@ -1,4 +1,4 @@
-# agent/providers/whapi.py — Adaptador Blindado 🏹🦾
+# agent/providers/whapi.py — Blindaje Nivel Industrial 🛡️🦾
 import os, logging, httpx
 from fastapi import Request
 from agent.providers.base import ProveedorWhatsApp, MensajeEntrante
@@ -15,22 +15,24 @@ class ProveedorWhapi(ProveedorWhatsApp):
             body = await request.json()
             mensajes = []
             
-            # Whapi manda los mensajes en una lista llamada 'messages'
             for msg in body.get("messages", []):
                 chat_id = msg.get("chat_id") or msg.get("to") or ""
                 
-                # 🏹 DETECTOR DE ORIGEN ROBUSTO
-                # Miramos todas las formas posibles en que Whapi nos dice que el mensaje es nuestro
-                es_propio = msg.get("from_me", msg.get("fromMe", False))
+                # 🏹 DETECCIÓN MULTI-CAPA
+                # 1. Por banderas de Whapi
+                es_propio = msg.get("from_me") or msg.get("fromMe") or msg.get("out") or False
                 
-                # Algunos webhooks vienen con el campo 'from_me' pero 'messages' vacío
-                # Si el mensaje no trae texto real o dice que salió de nosotros, lo marcamos
+                # 2. Por contenido del mensaje (Corta-bucle de emergencia)
                 texto_body = ""
                 if isinstance(msg.get("text"), dict):
-                    texto_body = msg.get("text", {}).get("body", "")
+                    texto_body = msg.get("text", {}).get("body", "").strip()
                 
+                # Si el mensaje dice "Aguantame un toque", es el bot. Punto.
+                if "Aguantame un toque" in texto_body or "Dame un minutito" in texto_body:
+                    es_propio = True
+
                 if es_propio:
-                    logger.info(f"🚫 Mensaje SALIENTE (id: {msg.get('id')}) detectado. Ignorando para evitar bucle.")
+                    logger.info(f"🚫 [BUCLE EVITADO] Ignorando mensaje propio ID: {msg.get('id')}")
 
                 mensajes.append(MensajeEntrante(
                     telefono=chat_id,
@@ -44,28 +46,13 @@ class ProveedorWhapi(ProveedorWhatsApp):
             return []
 
     async def enviar_mensaje(self, telefono: str, mensaje: str) -> bool:
-        if not self.token:
-            logger.warning("¡ALERTA! WHAPI_TOKEN no está configurado")
-            return False
-            
-        headers = {
-            "Authorization": f"Bearer {self.token}", 
-            "Content-Type": "application/json"
-        }
-        
-        payload = {
-            "to": telefono, 
-            "body": mensaje,
-            "typing_time": 0
-        }
-        
+        if not self.token: return False
+        headers = {"Authorization": f"Bearer {self.token}", "Content-Type": "application/json"}
+        payload = {"to": telefono, "body": mensaje, "typing_time": 0}
         try:
             async with httpx.AsyncClient(timeout=30.0) as client:
                 r = await client.post(self.url_envio, json=payload, headers=headers)
-                if r.status_code in [200, 201]:
-                    return True
-                logger.error(f"Error Whapi ({r.status_code}): {r.text}")
-                return False
+                return r.status_code in [200, 201]
         except Exception as e:
-            logger.error(f"Error de red Whapi: {e}")
+            logger.error(f"Error red: {e}")
             return False
