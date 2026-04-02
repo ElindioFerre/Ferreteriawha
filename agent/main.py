@@ -1,21 +1,80 @@
-# agent/main.py — Súper Logging 🏹🛰️
+# agent/main.py — El Corazón del Indio 🏹❤️
+import os, logging
+from contextlib import asynccontextmanager
+from fastapi import FastAPI, Request, HTTPException, BackgroundTasks
+from fastapi.responses import PlainTextResponse
+from dotenv import load_dotenv
+from agent.brain import generar_respuesta
+from agent.memory import inicializar_db, guardar_mensaje, obtener_historial
+from agent.providers import obtener_proveedor
+
+# 1. Configuración de Logs y Entorno
+load_dotenv()
+log_level = logging.INFO
+logging.basicConfig(level=log_level, format="%(asctime)s [%(levelname)s] %(name)s: %(message)s")
+logger = logging.getLogger("agentkit")
+
+# 2. Inicializar Proveedor
+proveedor = obtener_proveedor()
+
+# 3. Lógica de Procesamiento Asíncrono
+async def procesar_mensaje_async(msg):
+    try:
+        # 🏹 FILTRO DE SEGURIDAD (Si es nuestro o está vacío, no hacemos nada)
+        if msg.es_propio or not msg.texto: return
+        
+        logger.info(f"🚀 PROCESANDO MENSAJE de {msg.telefono}")
+        historial = await obtener_historial(msg.telefono)
+        
+        # Le pedimos la respuesta a la IA
+        respuesta = await generar_respuesta(msg.texto, historial)
+        
+        # Enviamos la respuesta al cliente
+        enviado = await proveedor.enviar_mensaje(msg.telefono, respuesta)
+        
+        if enviado:
+            logger.info(f"✅ RESPUESTA ENVIADA a {msg.telefono}")
+            await guardar_mensaje(msg.telefono, "user", msg.texto)
+            await guardar_mensaje(msg.telefono, "assistant", respuesta)
+        else:
+            logger.error(f"❌ FALLO EL ENVÍO a {msg.telefono}")
+            
+    except Exception as e:
+        logger.error(f"❌ ERROR CRÍTICO: {e}", exc_info=True)
+
+# 4. Configuración de la App (FastAPI)
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    await inicializar_db()
+    logger.info("📡 BASE DE DATOS Y AGENTE INICIALIZADOS")
+    yield
+
+app = FastAPI(title="Ferreteria El Indio Agent", lifespan=lifespan)
+
+# 5. Endpoints (Rutas)
+@app.get("/")
+async def health():
+    return {"status": "ok", "agente": "Ferreteria El Indio"}
+
+@app.get("/webhook")
+async def webhook_get(request: Request):
+    resultado = await proveedor.validar_webhook(request)
+    if resultado is not None:
+        return PlainTextResponse(str(resultado))
+    return {"status": "ok"}
+
 @app.post("/webhook")
 async def webhook_post(request: Request, background_tasks: BackgroundTasks):
     try:
-        data = await request.json()
-        logger.info(f"📥 WEBHOOK RECIBIDO: {data.keys()}") # <--- LOG CLAVE
-        
         mensajes = await proveedor.parsear_webhook(request)
         if not mensajes:
-            logger.info("ℹ️ Webhook sin mensajes (posible status o confirmación).")
             return {"status": "ok"}
 
         for msg in mensajes:
-            logger.info(f"💬 Mensaje detectado de {msg.telefono}. Propio? {msg.es_propio}")
             if msg.es_propio or not msg.texto:
                 continue
             
-            logger.info(f"🚀 Disparando procesamiento para: {msg.texto[:20]}...")
+            logger.info(f"📥 MENSAJE RECIBIDO de {msg.telefono}: {msg.texto[:30]}...")
             background_tasks.add_task(procesar_mensaje_async, msg)
         
         return {"status": "accepted"}
