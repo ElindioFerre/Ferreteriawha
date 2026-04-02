@@ -1,13 +1,15 @@
-# agent/brain.py — Versión TERCA (No se rinde) 🏹🦾🛡️⚡
+# agent/brain.py — Motor de Multicilindrada (Rotación de Llaves) 🏹🚀🦾⚡
 import os, logging, asyncio, google.generativeai as genai
 from agent.tools import buscar_precio
 
 logger = logging.getLogger("agentkit")
-genai.configure(api_key=os.getenv("GOOGLE_API_KEY"))
+
+# 🏹 CARGAMOS TODAS LAS LLAVES (Soporta múltiples llaves separadas por coma)
+raw_keys = os.getenv("GOOGLE_API_KEYS") or os.getenv("GOOGLE_API_KEY") or ""
+LISTA_LLAVES = [k.strip() for k in raw_keys.split(",") if k.strip()]
 
 async def generar_respuesta(mensaje_usuario, historial):
-    # 🏹 Solo los que sabemos que funcionan o pueden funcionar
-    model_names = ["gemini-flash-latest", "gemini-1.5-flash", "gemini-2.0-flash", "gemini-pro"]
+    model_names = ["gemini-flash-latest", "gemini-1.5-flash", "gemini-pro"]
     
     contexto = ""
     try:
@@ -16,31 +18,29 @@ async def generar_respuesta(mensaje_usuario, historial):
             if "no se encontró" in contexto.lower(): contexto = ""
     except: pass
 
-    system_prompt = f"Sos el asistente de 'Ferretería El Indio'. Horarios: L-V 8-18, Sáb 9-14, Dom/Fer 9-13. Datos: {contexto}"
+    system_prompt = f"Sos el asistente experto de 'Ferretería El Indio'. Horarios: L-V 8-18 (Corrido), Sáb 9-14, Dom/Fer 9-13. Ayudá con consejos técnicos. Datos: {contexto}"
 
-    for name in model_names:
-        intentos = 0
-        while intentos < 3: # 🏹 Tres intentos por modelo
-            try:
-                model = genai.GenerativeModel(name)
-                response = await model.generate_content_async(f"{system_prompt}\n\nCliente: {mensaje_usuario}")
-                if response and hasattr(response, 'text') and response.text:
-                    return response.text
-            except Exception as e:
-                error_msg = str(e)
-                if "429" in error_msg or "quota" in error_msg.lower():
-                    # 🏹 SI GOOGLE NOS FRENA, ESPERAMOS DE VERDAD
-                    espera = 10 if intentos == 0 else 20
-                    logger.warning(f"⏳ PEAJE LLENO ({name}). Esperando {espera}s para reintentar...")
-                    await asyncio.sleep(espera)
-                    intentos += 1
-                    continue
-                
-                # Si el modelo no existe (404), pasamos al siguiente modelo de una
-                if "404" in error_msg:
-                    break
-                    
-                logger.error(f"❌ Error inesperado en {name}: {e}")
-                break
+    # 🏹 CAMBIAMOS DE LLAVE SI LA ACTUAL SE AGOTA
+    for api_key in LISTA_LLAVES:
+        try:
+            genai.configure(api_key=api_key)
+            
+            for name in model_names:
+                try:
+                    model = genai.GenerativeModel(name)
+                    response = await model.generate_content_async(f"{system_prompt}\n\nCliente: {mensaje_usuario}")
+                    if response and hasattr(response, 'text') and response.text:
+                        return response.text
+                except Exception as e:
+                    error_msg = str(e).lower()
+                    if "429" in error_msg or "quota" in error_msg:
+                        logger.warning(f"⏳ Llave agotada... Saltando a la siguiente...")
+                        # Salta al siguiente api_key
+                        break 
+                    if "404" in error_msg:
+                        continue # Prueba el siguiente modelo con la misma llave
+                    break # Error desconocido, saltamos llave
+        except:
+            continue
 
-    return "¡Hola! Estoy con un poquito de demora pero ya te atiendo. ¿Qué me decías?"
+    return "¡Hola! Estoy con mucha gente en el mostrador. Aguantame un segundo y preguntame de nuevo."
