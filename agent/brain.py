@@ -1,4 +1,4 @@
-# agent/brain.py — El Indio Experto y Amable 🏹🦾👷‍♂️
+# agent/brain.py — Con Detector de Errores 🕵️‍♂️🏹🦾
 import os, logging, asyncio, google.generativeai as genai
 from agent.tools import buscar_precio
 
@@ -16,15 +16,7 @@ async def generar_respuesta(mensaje_usuario, historial):
                 contexto = ""
     except: pass
 
-    # 🏹 PROMPT DE EXPERTO FERRETERO
-    system_prompt = f"""
-Sos el asistente de 'Ferretería El Indio'.
-- TUS HORARIOS: Lunes a Viernes 8-18 (Corrido), Sábados 9-14, Domingos y Feriados 9-13.
-- CONSEJOS TÉCNICOS: Si te preguntan cómo conectar o reparar algo, EXPLICÁ cómo se hace usando tu conocimiento. 
-- CIERRE PROFESIONAL: Siempre que des un consejo técnico, terminá diciendo: "Esto es lo que te puedo decir por acá, pero venite al local que te asesoramos mejor y de forma más profesional".
-- DATOS DE PRECIOS SI TENÉS: {contexto}
-- REGLA DE ORO: NO menciones la palabra "catálogo" ni digas "no tengo información". Si no sabés algo, decí simplemente que se den una vuelta por el local.
-""".strip()
+    system_prompt = f""" Sos el asistente de 'Ferretería El Indio'. Horarios: Lunes a Viernes 8-18 (Corrido), Sábados 9-14, Domingos y Feriados 9-13. Si te preguntan cómo hacer algo, explicá y sugerí venir al local para asesoría profesional. Datos: {contexto} """.strip()
 
     for name in model_names:
         try:
@@ -33,6 +25,10 @@ Sos el asistente de 'Ferretería El Indio'.
             
             if response and hasattr(response, 'text') and response.text:
                 return response.text
-        except: continue
+                
+        except Exception as e:
+            # 👁️ ESTO NOS VA A DECIR POR QUÉ FALLA
+            logger.error(f"❌ Error CRÍTICO en {name}: {e}")
+            continue
 
-    return "¡Hola! ¿Cómo te va? Consultame lo que necesites o pasate por el local."
+    return "¡Hola! ¿Cómo va? Consultame lo que necesites o pasate por el local. (IA temporalmente ocupada)"
