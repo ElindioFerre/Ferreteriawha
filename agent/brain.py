@@ -1,56 +1,54 @@
-# agent/brain.py — Versión Con Personalidad 🏹🦾
-import os, httpx, logging
+# agent/brain.py — Versión Ultra-Blindada y Resistente 🏹🛡️
+import os, httpx, logging, asyncio
 from agent.tools import buscar_precio
 
 logger = logging.getLogger("agentkit")
 
 async def generar_respuesta(mensaje_usuario, historial):
     api_key = os.getenv("GOOGLE_API_KEY")
-    model_name = "gemini-3-flash-preview" 
-    url = f"https://generativelanguage.googleapis.com/v1beta/models/{model_name}:generateContent?key={api_key}"
+    
+    # 🏹 LISTA DE MODELOS (Si uno falla, probamos el otro)
+    modelos_a_probar = ["gemini-1.5-flash-latest", "gemini-3-flash-preview"]
     
     contexto_precios = ""
     try:
-        # Solo buscamos si el usuario parece estar preguntando un precio o producto
         contexto_precios = buscar_precio(mensaje_usuario)
     except: pass
 
-    # 🏹 UN SYSTEM PROMPT MUCHO MÁS DETALLADO:
     system_prompt = f"""
-Eres "El Indio", el alma de la Ferretería El Indio. 
-Tu misión es atender a los clientes con amabilidad, rapidez y ese toque rústico del oficio.
-
-REGLAS DE ORO:
-1. SALUDO: Sé amable y usa términos como "paisano", "don", "doña".
-2. PRECIOS: Si encuentras precios en los datos de abajo, dáselos con seguridad. 
-3. SI NO HAY PRECIOS: No digas "no encontré en el catálogo". Di algo como: "No tengo el precio justo acá a mano, pero si te pasás lo buscamos en el mostrador". 
-4. BREVEDAD: Responde corto y al punto, no escribas testamentos.
-5. HORARIOS Y UBICACIÓN: Si te preguntan, dales los datos: 
-   - Lun-Vie: 08:00 a 18:00 (corrido).
-   - Sab: 09:00 a 14:00.
-   - Dom/Feriados: 09:00 a 13:00.
-
-DATOS EXTRAÍDOS (Úsalos solo si sirven): {contexto_precios}
+Eres el "Indio", ferretero experto y amable. 
+REGLAS: Sé servicial, rústico y breve. Si no hay stock o precio, invita al local.
+HORARIOS: Lun-Vie 8-18, Sab 9-14, Dom/Feriado 9-13.
+INFO PRECIOS: {contexto_precios}
 """.strip()
 
     payload = {
-        "contents": [{"parts": [{"text": f"{system_prompt}\n\nCliente dice: {mensaje_usuario}"}]}]
+        "contents": [{"parts": [{"text": f"{system_prompt}\n\nCliente: {mensaje_usuario}"}]}]
     }
 
-    try:
-        async with httpx.AsyncClient(timeout=30.0) as client:
-            response = await client.post(url, json=payload)
-            if response.status_code == 200:
-                res_json = response.json()
-                if 'candidates' in res_json and res_json['candidates']:
-                    return res_json['candidates'][0]['content']['parts'][0]['text']
-            
-            if response.status_code == 429:
-                return "¡Buenas paisano! Aguantame un cachito que se me llenó el mostrador y ya lo atiendo."
-            
-            logger.error(f"Error {response.status_code}: {response.text}")
-            return "Perdone paisano, se me cortó la señal del satélite. ¿Qué me decía?"
+    # 🏹 INTENTAMOS 3 VECES ANTES DE DARNOS POR VENCIDOS
+    for intento in range(3):
+        for model_name in modelos_a_probar:
+            url = f"https://generativelanguage.googleapis.com/v1beta/models/{model_name}:generateContent?key={api_key}"
+            try:
+                async with httpx.AsyncClient(timeout=30.0) as client:
+                    response = await client.post(url, json=payload)
+                    
+                    if response.status_code == 200:
+                        res_json = response.json()
+                        return res_json['candidates'][0]['content']['parts'][0]['text']
+                    
+                    if response.status_code == 429:
+                        logger.warning(f"Límite excedido en {model_name}, esperando...")
+                        await asyncio.sleep(2) # Esperamos 2 segunditos
+                        continue # Probamos el siguiente modelo o el siguiente intento
+                    
+                    logger.error(f"Falla {model_name}: {response.status_code}")
 
-    except Exception as e:
-        logger.error(f"Error: {e}")
-        return "Se me trabó la neurona, ¿podés repetir?"
+            except Exception as e:
+                logger.error(f"Error en intento con {model_name}: {e}")
+        
+        # Si llegamos acá, esperamos un poco más para el próximo gran intento
+        await asyncio.sleep(1)
+
+    return "¡Perdone paisano! El satélite anda a los saltos. ¿Me repite lo último que se me entrecortó?"
