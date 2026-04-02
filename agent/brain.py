@@ -1,6 +1,5 @@
-import os
-import httpx
-import logging
+# agent/brain.py — Cerebro con Horarios Reales 🏹
+import os, httpx, logging
 from agent.tools import buscar_precio
 
 logger = logging.getLogger("agentkit")
@@ -8,48 +7,50 @@ logger = logging.getLogger("agentkit")
 async def generar_respuesta(mensaje_usuario, historial):
     api_key = os.getenv("GOOGLE_API_KEY")
     
-    # Modelo Gemini 3 Flash (El de 500 RPM)
-    model_name = "gemini-3-flash-preview" 
+    # 🏹 MODELO ESTABLE (Gemini 2.0 Flash)
+    model_name = "gemini-2.0-flash" 
     url = f"https://generativelanguage.googleapis.com/v1beta/models/{model_name}:generateContent?key={api_key}"
     
     # 🔍 Buscamos precios
     contexto_precios = ""
     palabras_precio = ['cuanto', 'precio', 'vale', 'costo', 'tenes', 'hay', 'presupuesto', 'tenés']
-    
     if any(p in mensaje_usuario.lower() for p in palabras_precio) or len(mensaje_usuario.split()) < 4:
-        contexto_precios = buscar_precio(mensaje_usuario)
-        logger.info(f"Busqueda de precios activa")
+        try:
+            contexto_precios = buscar_precio(mensaje_usuario)
+        except Exception as e:
+            logger.error(f"Error precios: {e}")
 
-    # 🤖 El Indio
+    # 🤖 EL INDIO (Con horarios REALES de la ferretería)
     system_prompt = f"""
 Eres 'Indio', el encargado de 'Ferretería El Indio'.
-Estilo: Amable, rústico, de la zona.
-Si el cliente pregunta precios, usá estos datos que encontré:
+Estilo: Amable, rústico, de campo pero servicial y directo.
+
+HORARIOS DE LA FERRETERÍA:
+- Lunes a Viernes: 08:00 a 18:00 (de corrido).
+- Sábados: 09:00 a 14:00.
+- Domingos y Feriados: 09:00 a 13:00.
+
+DATOS DE PRODUCTOS ENCONTRADOS:
 {contexto_precios}
 
 REGLAS:
-1. Si no encontrás el precio, decile que no lo tenés a mano y pedile detalles (medida, MARCA, etc).
-2. No inventes precios.
-3. Respondé cortito y servicial.
+1. Si pregunta precios y ves productos arriba, deciles el nombre y el precio exacto.
+2. Si NO hay productos arriba, decile que vas a consultar al depósito y pídele más detalles.
+3. Si preguntan horarios o ubicación, deciles la info de arriba.
+4. Respondé siempre cortito, máximo 3 líneas.
 """.strip()
 
     payload = {
-        "contents": [
-            {
-                "parts": [{"text": f"SISTEMA:\n{system_prompt}\n\nMensaje: {mensaje_usuario}"}]
-            }
-        ]
+        "contents": [{"parts": [{"text": f"SISTEMA:\n{system_prompt}\n\nMensaje: {mensaje_usuario}"}]}]
     }
 
     try:
-        async with httpx.AsyncClient() as client:
-            response = await client.post(url, json=payload, timeout=30.0)
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            response = await client.post(url, json=payload)
             if response.status_code == 200:
                 res_json = response.json()
                 if 'candidates' in res_json and res_json['candidates']:
                     return res_json['candidates'][0]['content']['parts'][0]['text']
-                return "Che, se me quedó pensando el cerebro. ¿Me repetís?"
-            return f"Hubo un temita (Error {response.status_code})."
+            return "Perdone paisano, se me cortó la señal del satélite un segundo. ¿Qué me decía?"
     except Exception as e:
-        logger.error(f"Error: {e}")
         return "Se me trabó la neurona, ¿podés repetir?"
