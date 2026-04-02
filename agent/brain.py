@@ -1,47 +1,53 @@
 import os
 import httpx
+import logging
 from agent.tools import buscar_precio
+
+logger = logging.getLogger("agentkit")
 
 async def generar_respuesta(mensaje_usuario, historial):
     api_key = os.getenv("GOOGLE_API_KEY")
-    # MODELO ILIMITADO SEGÚN TU CONSOLA
-   model_name = "gemini-3-flash-preview"
+    
+    # Modelo Gemini 3 Flash
+    model_name = "gemini-3-flash-preview" 
     url = f"https://generativelanguage.googleapis.com/v1beta/models/{model_name}:generateContent?key={api_key}"
     
-    # 🔍 Búsqueda de precios antes de hablar
-    palabras_precio = ['cuanto', 'precio', 'vale', 'tenes', 'costo', 'presupuesto', 'hay']
+    # 🔍 Buscamos precios
     contexto_precios = ""
-    if any(p in mensaje_usuario.lower() for p in palabras_precio) or len(mensaje_usuario.split()) < 4:
-        contexto_precios = buscar_precio(mensaje_usuario)
-
-    # 🏹 El Espíritu del Indio
-    sistema = f"""
-Eres 'Indio', el asistente rústico de 'Ferretería El Indio'.
-IMPORTANTE:
-- Si el catálogo tiene el precio, dáselo al cliente.
-- Si no está, pídele medidas o marca para buscar mejor.
-- Sé servicial pero directo, como un ferretero de confianza.
-
-DATOS DEL CATÁLOGO ACTUAL:
-{contexto_precios}
-""".strip()
+    palabras_clave = ['cuanto', 'precio', 'vale', 'costo', 'tenes', 'hay', 'presupuesto', 'tenés']
     
-    datos = {
-        "contents": [{
-            "parts": [{"text": f"SISTEMA:\n{sistema}\n\nUSUARIO: {mensaje_usuario}"}]
-        }]
+    if any(p in mensaje_usuario.lower() for p in palabras_clave) or len(mensaje_usuario.split()) < 4:
+        contexto_precios = buscar_precio(mensaje_usuario)
+        logger.info(f"Busqueda de precios activa")
+
+    # 🤖 El Indio
+    system_prompt = f"""
+Eres 'Indio', el encargado de 'Ferretería El Indio'.
+Estilo: Amable, rústico, servicial.
+Si el cliente pregunta precios, usa estos datos:
+{contexto_precios}
+
+REGLAS:
+1. Si no encontrás el precio, decile que no lo tenés a mano y pedile detalles.
+2. No inventes precios. 
+3. Respondé cortito.
+""".strip()
+
+    payload = {
+        "contents": [
+            {
+                "parts": [{"text": f"SISTEMA:\n{system_prompt}\n\nMensaje: {mensaje_usuario}"}]
+            }
+        ]
     }
 
     try:
         async with httpx.AsyncClient() as client:
-            response = await client.post(url, json=datos, timeout=30.0)
-            
-            # Si el modelo "live" no responde por REST, el bot nos avisará
+            response = await client.post(url, json=payload, timeout=30.0)
             if response.status_code == 200:
-                return response.json()['candidates'][0]['content']['parts'][0]['text']
-            
-            # Si tira 404 (modelo no encontrado), avisame y probamos con 'gemini-3-flash-preview'
-            return f"Che, el modelo {model_name} tiró error {response.status_code}. ¿Lo cambiamos?"
-            
+                res_json = response.json()
+                return res_json['candidates'][0]['content']['parts'][0]['text']
+            return f"Hubo un temita (Error {response.status_code})."
     except Exception as e:
-        return f"Se me cortó el cable: {str(e)[:50]}"
+        logger.error(f"Error: {e}")
+        return "Se me trabó la neurona, ¿podés repetir?"
