@@ -1,4 +1,4 @@
-# agent/brain.py — Versión REFORZADA 🏹🦾🛡️
+# agent/brain.py — Versión con LLAVE NUEVA 🏹🦾🔓
 import os, logging, asyncio, google.generativeai as genai
 from agent.tools import buscar_precio
 
@@ -6,8 +6,8 @@ logger = logging.getLogger("agentkit")
 genai.configure(api_key=os.getenv("GOOGLE_API_KEY"))
 
 async def generar_respuesta(mensaje_usuario, historial):
-    # 🏹 Mantenemos tus modelos que ya sabemos que funcionan
-    model_names = ["gemini-flash-latest", "gemini-pro-latest"]
+    # 🏹 VOLVEMOS AL ESTÁNDAR (Como es cuenta nueva, estos son los que vuelan)
+    model_names = ["gemini-1.5-flash", "gemini-pro"]
     
     contexto = ""
     try:
@@ -15,35 +15,32 @@ async def generar_respuesta(mensaje_usuario, historial):
             contexto = buscar_precio(mensaje_usuario)
     except: pass
 
-    # Reforzamos los horarios al mango
+    # Reforzamos los horarios a tope
     system_prompt = f"""
-SABER IMPORTANTE:
-- HORARIOS: Lunes a Viernes de 8:00 a 18:00 (largo), Sábados de 9:00 a 14:00, Domingos y Feriados de 9:00 a 13:00.
+SABER IMPORTANTE (RESPONDER SIEMPRE ESTO SI PREGUNTAN):
+- HORARIOS: Lunes a Viernes de 8:00 a 18:00 (horario corrido), Sábados de 9:00 a 14:00, Domingos y Feriados de 9:00 a 13:00.
 - LUGAR: Ferretería El Indio.
-- PERSONALIDAD: Amable, servicial, "paisano" pero moderno.
-- DATOS EXTRA: {contexto}
+- PERSONALIDAD: Amable, servicial, usá 'Hola' o 'Amigo'.
+- PRODUCTOS ENCONTRADOS: {contexto}
 """.strip()
 
     for name in model_names:
         intentos = 0
-        while intentos < 3: # 🔄 SISTEMA DE REINTENTOS (Terco)
+        while intentos < 3:
             try:
-                logger.info(f"Intentando {name} (Intento {intentos+1})")
+                # logger.info(f"Probando modelo estándar {name} con llave nueva...")
                 model = genai.GenerativeModel(name)
+                # Nota: generate_content es síncorno en el SDK de google-generativeai
                 response = model.generate_content(f"{system_prompt}\n\nCliente: {mensaje_usuario}")
                 
                 if response and hasattr(response, 'text') and response.text:
+                    logger.info(f"✅ ¡ÉXITO TOTAL con {name}!")
                     return response.text
                     
             except Exception as e:
                 error_msg = str(e).lower()
                 if "429" in error_msg or "quota" in error_msg:
-                    logger.warning(f"⚠️ Google saturado, esperando 2 seg...")
-                    await asyncio.sleep(2) # Espera un toque y reintenta
+                    logger.warning(f"⚠️ Google saturado ({name}), reintentando en 2.5s...")
+                    await asyncio.sleep(2.5)
                     intentos += 1
                     continue
-                
-                logger.warning(f"❌ Error en {name}: {e}")
-                break # Si es otro error, saltamos de modelo
-
-    return "¡Hola amigo! Aguantame un milisegundo que estoy buscando el precio en el mostrador. ¿Qué me decías?"
