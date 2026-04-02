@@ -1,24 +1,20 @@
 import os
-import yaml
 from google import genai
 from google.genai import types
 
-# Cargar configuraciones
-def cargar_config():
-    with open("config/prompts.yaml", "r", encoding="utf-8") as f:
-        prompts = yaml.safe_load(f)
-    return prompts
-
 async def generar_respuesta(mensaje_usuario, historial):
     client = genai.Client(api_key=os.getenv("GOOGLE_API_KEY"))
-    prompts = cargar_config()
     
-    # Armar el contexto
-    sistema = prompts["agent_persona"]["system_prompt"]
+    # Personalidad del Indio (Directo en el código para que no falle)
+    sistema = """
+Eres el asistente virtual de 'Ferretería El Indio'. Tu nombre es 'Indio'. 
+Atiendes por WhatsApp con un tono amable, profesional pero también cercano y algo rústico.
+Tu objetivo es ayudar a los clientes con precios, stock y consultas técnicas simples.
+Si no sabes algo, dile que pueden pasar por el local o llamar al dueño.
+"""
     
     # Filtramos el historial para que la IA entienda
     contents = []
-    # El historial viene del main.py ordenado del más viejo al más nuevo
     for h in historial:
         role = "user" if h["role"] == "user" else "model"
         contents.append(types.Content(role=role, parts=[types.Part.from_text(text=h["content"])]))
@@ -38,17 +34,7 @@ async def generar_respuesta(mensaje_usuario, historial):
         )
         return response.text
     except Exception as e:
-        print(f"Error con gemini-2.0-flash: {e}")
-        # SI FALLA, intentamos con el modelo estable
-        try:
-            response = client.models.generate_content(
-                model="gemini-1.5-flash",
-                config=types.GenerateContentConfig(
-                    system_instruction=sistema,
-                ),
-                contents=contents
-            )
-            return response.text
-        except Exception as e2:
-            print(f"Error crítico en IA: {e2}")
-            return "Lo siento, el Indio está un poco distraído ahora mismo... ¿Podés repetirme tu consulta en un minuto?"
+        print(f"Error con gemini: {e}")
+        # SI FALLA por cuota o cualquier cosa, respondemos algo digno
+        return "Lo siento, el Indio está atendiendo a mucha gente ahora mismo... ¿Podés repetirme tu consulta en un minuto?"
+
