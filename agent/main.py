@@ -1,4 +1,4 @@
-# agent/main.py — Versión DEFINITIVA (Sin errores de segundo plano) 🏹🦾⚡
+# agent/main.py — El Corazón del Indio (Unificado) 🏹🦾⚡
 import os, logging
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request, BackgroundTasks
@@ -38,9 +38,9 @@ async def webhook_get():
 @app.post("/webhook")
 async def webhook_post(r: Request, bt: BackgroundTasks):
     try:
-        # 🏹 LEEMOS EL JSON ACÁ (Obligatorio antes de responder 200 OK)
         body = await r.json()
-        mensajes = await proveedor.parsear_webhook_manual(body) # Nueva función manual
+        # 🏹 USAMOS EL NOMBRE QUE YA TENEMOS
+        mensajes = await proveedor.parsear_webhook(raw_body=body)
         
         if mensajes:
             for msg in mensajes:
@@ -54,4 +54,3 @@ async def webhook_post(r: Request, bt: BackgroundTasks):
 
 @app.get("/")
 async def health(): return {"status": "ok"}
-
