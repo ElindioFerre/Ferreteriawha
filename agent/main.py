@@ -1,67 +1,77 @@
-# agent/main.py — Con más visibilidad 🏹🕵️‍♂️⚡
-import os, logging
-from contextlib import asynccontextmanager
-from fastapi import FastAPI, Request, BackgroundTasks
-from fastapi.responses import PlainTextResponse
-from dotenv import load_dotenv
-from agent.brain import generar_respuesta
-from agent.memory import inicializar_db, guardar_mensaje, obtener_historial
-from agent.providers import obtener_proveedor
+# agent/tools.py — El Bibliotecario del Indio (Búsqueda de 111k productos) 🏹🦾📚✨
+import os, sqlite3, requests, logging, json
 
-load_dotenv()
-logging.basicConfig(level=logging.INFO, format="%(asctime)s agentkit: %(message)s")
 logger = logging.getLogger("agentkit")
-proveedor = obtener_proveedor()
+DB_PATH = os.path.join("knowledge", "catalogo.db")
+JSON_URL = "https://ferreteriaelindio.netlify.app/data.json"
 
-async def procesar_mensaje_async(msg):
+def sincronizar_catalogo():
+    """Descarga el JSON de la web y lo vuelca a una base de datos SQLite rápida"""
     try:
-        logger.info(f"🧠 Empezando a procesar mensaje de {msg.telefono}")
+        logger.info("📡 Iniciando sincronismo con la web (111k productos)...")
+        r = requests.get(JSON_URL, timeout=30)
+        productos = r.json()
         
-        logger.info("📚 Buscando historial...")
-        historial = await obtener_historial(msg.telefono)
+        # Conexión y limpieza de la base
+        conn = sqlite3.connect(DB_PATH)
+        c = conn.cursor()
+        c.execute("DROP TABLE IF EXISTS productos")
+        c.execute("""CREATE TABLE productos (
+                        nombre TEXT, 
+                        precio REAL, 
+                        rubro TEXT, 
+                        id TEXT PRIMARY KEY
+                    )""")
         
-        logger.info("🤖 Llamando a la IA (con modelos Async)...")
-        respuesta = await generar_respuesta(msg.texto, historial)
+        # Carga masiva (Batch Insert) para máxima velocidad
+        batch = []
+        for p in productos:
+            batch.append((
+                f"{p['category']} - {p['name']}", # Combinamos para que la IA entienda qué es
+                p.get("price", 0),
+                p.get("provider", ""),
+                p.get("id", "")
+            ))
         
-        logger.info(f"📤 Enviando respuesta a {msg.telefono}...")
-        enviado = await proveedor.enviar_mensaje(msg.telefono, respuesta)
-        
-        if enviado:
-            logger.info("✨ CICLO COMPLETADO CON ÉXITO")
-            await guardar_mensaje(msg.telefono, "user", msg.texto)
-            await guardar_mensaje(msg.telefono, "assistant", respuesta)
-        else:
-            logger.error(f"❌ FALLÓ EL ENVÍO FINAL a {msg.telefono}")
-            
+        c.executemany("INSERT OR REPLACE INTO productos VALUES (?,?,?,?)", batch)
+        # Creamos un índice para que la búsqueda vuele
+        c.execute("CREATE INDEX IF NOT EXISTS idx_nombre ON productos(nombre)")
+        conn.commit()
+        conn.close()
+        logger.info(f"✨ ¡Sincronizado! {len(productos)} productos listos.")
+        return True
     except Exception as e:
-        logger.error(f"❌ ERROR EN CICLO: {e}", exc_info=True)
+        logger.error(f"❌ Error sincronizando: {e}")
+        return False
 
-@asynccontextmanager
-async def lifespan(app: FastAPI):
-    await inicializar_db()
-    logger.info("📡 EL INDIO ESTÁ LISTO")
-    yield
+def buscar_precio(consulta: str) -> str:
+    """Busca en el Bibliotecario de SQLite de forma ultra-rápida"""
+    if not os.path.exists(DB_PATH):
+        # Si no existe la DB, intentamos crearla al vuelo (solo si no es muy pesado)
+        sincronizar_catalogo()
 
-app = FastAPI(lifespan=lifespan)
-
-@app.get("/webhook")
-async def webhook_get(): 
-    return PlainTextResponse("ok")
-
-@app.post("/webhook")
-async def webhook_post(r: Request, bt: BackgroundTasks):
-    try:
-        body = await r.json()
-        mensajes = await proveedor.parsear_webhook(raw_body=body)
-        if mensajes:
-            for msg in mensajes:
-                if not msg.es_propio and msg.texto:
-                    logger.info(f"📥 MENSAJE ENTRANTE: {msg.telefono}")
-                    bt.add_task(procesar_mensaje_async, msg)
-    except Exception as e:
-        logger.error(f"Error webhook: {e}")
+    # Limpiamos pregunta
+    ignorar = ["cuanto", "sale", "tenes", "precio", "de", "del"]
+    palabras = [p.lower() for p in consulta.lower().replace("?", "").split() if p not in ignorar and len(p) > 2]
     
-    return PlainTextResponse("ok")
+    if not palabras: return ""
 
-@app.get("/")
-async def health(): return {"status": "ok"}
+    try:
+        conn = sqlite3.connect(DB_PATH)
+        c = conn.cursor()
+        
+        # Búsqueda tipo SQL: Nombre LIKE %p1% AND Nombre LIKE %p2%...
+        where_clause = " AND nombre LIKE ? " * len(palabras)
+        params = [f"%{p}%" for p in palabras]
+        
+        query = f"SELECT nombre, precio, rubro FROM productos WHERE {where_clause} LIMIT 3"
+        c.execute(query, params)
+        res = c.fetchall()
+        conn.close()
+
+        if res:
+            return "\n".join([f"- {r[0]}: ${r[1]:,.2f} ({r[2]})" for r in res])
+        return ""
+    except Exception as e:
+        logger.error(f"Error buscando en DB: {e}")
+        return ""
