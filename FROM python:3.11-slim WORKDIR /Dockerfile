@@ -3,5 +3,6 @@ WORKDIR /app
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 COPY . .
-# Importante: Le sacamos el "agent." de adelante
-CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]
+# Le decimos a Python que busque en la raíz
+ENV PYTHONPATH=/app
+CMD ["uvicorn", "agent.main:app", "--host", "0.0.0.0", "--port", "8000"]
