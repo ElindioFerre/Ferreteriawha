@@ -1,4 +1,4 @@
-# agent/tools.py — El Bibliotecario del Indio (Búsqueda de 111k productos) 🏹🦾📚✨
+# agent/tools.py — Motor de Alta Potencia (Sincronismo de 111k productos) 🏹🦾📚✨
 import os, sqlite3, requests, logging, json
 
 logger = logging.getLogger("agentkit")
@@ -6,13 +6,21 @@ DB_PATH = os.path.join("knowledge", "catalogo.db")
 JSON_URL = "https://ferreteriaelindio.netlify.app/data.json"
 
 def sincronizar_catalogo():
-    """Descarga el JSON de la web y lo vuelca a una base de datos SQLite rápida"""
+    """Descarga los 111k productos y los guarda con eficiencia de memoria"""
     try:
-        logger.info("📡 Iniciando sincronismo con la web (111k productos)...")
-        r = requests.get(JSON_URL, timeout=30)
-        productos = r.json()
+        if not os.path.exists("knowledge"): os.makedirs("knowledge")
         
-        # Conexión y limpieza de la base
+        logger.info("📡 Descargando catálogo masivo desde la web...")
+        r = requests.get(JSON_URL, timeout=60, stream=True)
+        if r.status_code != 200:
+            logger.error(f"❌ Error al descargar catálogo: {r.status_code}")
+            return False
+
+        # Cargamos el JSON (Aquí es donde se consume RAM, cuidado)
+        productos = r.json()
+        total = len(productos)
+        logger.info(f"📊 Procesando {total} productos...")
+        
         conn = sqlite3.connect(DB_PATH)
         c = conn.cursor()
         c.execute("DROP TABLE IF EXISTS productos")
@@ -23,36 +31,43 @@ def sincronizar_catalogo():
                         id TEXT PRIMARY KEY
                     )""")
         
-        # Carga masiva (Batch Insert) para máxima velocidad
-        batch = []
-        for p in productos:
-            batch.append((
-                f"{p['category']} - {p['name']}", # Combinamos para que la IA entienda qué es
-                p.get("price", 0),
-                p.get("provider", ""),
-                p.get("id", "")
-            ))
+        # 🏹 INSERTAMOS EN TANDAS DE 5000 (Batch mode)
+        # Esto evita que la base de datos se bloquee o use demasiada memoria
+        for i in range(0, total, 5000):
+            batch = []
+            for p in productos[i:i+5000]:
+                batch.append((
+                    f"{p.get('category','')} {p.get('name','')}".strip(),
+                    p.get("price", 0),
+                    p.get("provider", "GENERAL"),
+                    p.get("id", "")
+                ))
+            c.executemany("INSERT OR REPLACE INTO productos VALUES (?,?,?,?)", batch)
+            conn.commit()
+            # liberamos un poco el objeto batch
+            del batch 
         
-        c.executemany("INSERT OR REPLACE INTO productos VALUES (?,?,?,?)", batch)
-        # Creamos un índice para que la búsqueda vuele
         c.execute("CREATE INDEX IF NOT EXISTS idx_nombre ON productos(nombre)")
         conn.commit()
         conn.close()
-        logger.info(f"✨ ¡Sincronizado! {len(productos)} productos listos.")
+        
+        # 🏹 Limpiamos la lista gigante de memoria para no clavar el bot
+        del productos 
+        
+        logger.info(f"✨ ¡Sincronizado! {total} productos listos en la DB.")
         return True
     except Exception as e:
-        logger.error(f"❌ Error sincronizando: {e}")
+        logger.error(f"❌ Falló el sincronismo: {e}")
         return False
 
 def buscar_precio(consulta: str) -> str:
-    """Busca en el Bibliotecario de SQLite de forma ultra-rápida"""
+    """Busca en el Bibliotecario SQLite (Ultra-rápido)"""
     if not os.path.exists(DB_PATH):
-        # Si no existe la DB, intentamos crearla al vuelo (solo si no es muy pesado)
-        sincronizar_catalogo()
+        return ""
 
-    # Limpiamos pregunta
-    ignorar = ["cuanto", "sale", "tenes", "precio", "de", "del"]
-    palabras = [p.lower() for p in consulta.lower().replace("?", "").split() if p not in ignorar and len(p) > 2]
+    ignorar = ["cuanto", "sale", "tenes", "precio", "de", "del", "la", "el", "quisiera", "saber"]
+    limpia = consulta.lower().replace("?", "").replace("!", "")
+    palabras = [p for p in limpia.split() if p not in ignorar and len(p) > 2]
     
     if not palabras: return ""
 
@@ -60,11 +75,11 @@ def buscar_precio(consulta: str) -> str:
         conn = sqlite3.connect(DB_PATH)
         c = conn.cursor()
         
-        # Búsqueda tipo SQL: Nombre LIKE %p1% AND Nombre LIKE %p2%...
-        where_clause = " AND nombre LIKE ? " * len(palabras)
+        # Búsqueda SQL Multiclave
+        where = " AND nombre LIKE ? " * len(palabras)
         params = [f"%{p}%" for p in palabras]
         
-        query = f"SELECT nombre, precio, rubro FROM productos WHERE {where_clause} LIMIT 3"
+        query = f"SELECT nombre, precio, rubro FROM productos WHERE {where} LIMIT 4"
         c.execute(query, params)
         res = c.fetchall()
         conn.close()
@@ -73,5 +88,5 @@ def buscar_precio(consulta: str) -> str:
             return "\n".join([f"- {r[0]}: ${r[1]:,.2f} ({r[2]})" for r in res])
         return ""
     except Exception as e:
-        logger.error(f"Error buscando en DB: {e}")
+        logger.error(f"Error en buscador: {e}")
         return ""
