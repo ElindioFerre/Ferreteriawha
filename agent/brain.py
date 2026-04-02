@@ -1,4 +1,4 @@
-# agent/brain.py — Versión Blindada 🏹
+# agent/brain.py — Versión Con Personalidad 🏹🦾
 import os, httpx, logging
 from agent.tools import buscar_precio
 
@@ -6,41 +6,51 @@ logger = logging.getLogger("agentkit")
 
 async def generar_respuesta(mensaje_usuario, historial):
     api_key = os.getenv("GOOGLE_API_KEY")
-    
-    # 🏹 USAMOS EL QUE YA FUNCIONÓ ANTES (Gemini 3 Flash Preview)
     model_name = "gemini-3-flash-preview" 
     url = f"https://generativelanguage.googleapis.com/v1beta/models/{model_name}:generateContent?key={api_key}"
     
     contexto_precios = ""
     try:
+        # Solo buscamos si el usuario parece estar preguntando un precio o producto
         contexto_precios = buscar_precio(mensaje_usuario)
     except: pass
 
-    system_prompt = f"Eres el Indio de la Ferretería El Indio. Horarios: Lun-Vie 08-18 (corrido), Sab 09-14, Dom/Feriado 09-13. Info: {contexto_precios}"
+    # 🏹 UN SYSTEM PROMPT MUCHO MÁS DETALLADO:
+    system_prompt = f"""
+Eres "El Indio", el alma de la Ferretería El Indio. 
+Tu misión es atender a los clientes con amabilidad, rapidez y ese toque rústico del oficio.
+
+REGLAS DE ORO:
+1. SALUDO: Sé amable y usa términos como "paisano", "don", "doña".
+2. PRECIOS: Si encuentras precios en los datos de abajo, dáselos con seguridad. 
+3. SI NO HAY PRECIOS: No digas "no encontré en el catálogo". Di algo como: "No tengo el precio justo acá a mano, pero si te pasás lo buscamos en el mostrador". 
+4. BREVEDAD: Responde corto y al punto, no escribas testamentos.
+5. HORARIOS Y UBICACIÓN: Si te preguntan, dales los datos: 
+   - Lun-Vie: 08:00 a 18:00 (corrido).
+   - Sab: 09:00 a 14:00.
+   - Dom/Feriados: 09:00 a 13:00.
+
+DATOS EXTRAÍDOS (Úsalos solo si sirven): {contexto_precios}
+""".strip()
 
     payload = {
-        "contents": [{"parts": [{"text": f"{system_prompt}\n\nCliente: {mensaje_usuario}"}]}]
+        "contents": [{"parts": [{"text": f"{system_prompt}\n\nCliente dice: {mensaje_usuario}"}]}]
     }
 
     try:
         async with httpx.AsyncClient(timeout=30.0) as client:
             response = await client.post(url, json=payload)
-            
-            # ✅ SI FUNCIONA (Código 200)
             if response.status_code == 200:
                 res_json = response.json()
                 if 'candidates' in res_json and res_json['candidates']:
                     return res_json['candidates'][0]['content']['parts'][0]['text']
-                return "Me quedé pensando... ¿me repetís?"
             
-            # ⏳ SI HAY MUCHOS MENSAJES (Código 429)
             if response.status_code == 429:
-                return "¡Aguantame un cachito paisano! Se me llenó el boliche y ya lo atiendo (Google hoy está pesado)."
+                return "¡Buenas paisano! Aguantame un cachito que se me llenó el mostrador y ya lo atiendo."
             
-            # ❌ SI GOOGLE SE PONE RARO (Otros errores como el 404 o 503)
-            logger.error(f"Error Google {response.status_code}: {response.text}")
-            return "Perdone paisano, se me cortó la señal del satélite un segundo. ¿Qué me decía?"
+            logger.error(f"Error {response.status_code}: {response.text}")
+            return "Perdone paisano, se me cortó la señal del satélite. ¿Qué me decía?"
 
     except Exception as e:
-        logger.error(f"Error crítico brain: {e}")
+        logger.error(f"Error: {e}")
         return "Se me trabó la neurona, ¿podés repetir?"
