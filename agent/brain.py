@@ -1,4 +1,4 @@
-# agent/brain.py — El Indio 11.0 EXPERTO (OJOS Y MOSTRADOR) 🏹📸🎙️🌀🦾💎✨🦾
+# agent/brain.py — El Indio 11.1 ESTABLE 🏹🛡️🦾💎✨🦾
 import os, logging, asyncio, sqlite3, httpx, time
 import google.generativeai as genai
 
@@ -26,27 +26,20 @@ LISTA_LLAVES = [k.strip() for k in raw_keys.split(",") if k.strip()]
 async def generar_respuesta(input_user, historial):
     contexto_catalog = buscar_en_el_catalogo(input_user)
     
-    # 🏹 IDENTIDAD EXPERTA 11.0
+    # 🏹 IDENTIDAD EXPERTA (ADN DANTE/DAIANA)
     system_prompt = f"""
-Sos el experto de mostrador de 'Ferretería El Indio'. 🏹🛡️🦾
+Sos el experto de mostrador de 'Ferretería El Indio'. ULTRA-CONCISO. 🏹🛡️🦾
 
 REGLA DE CARRO (Mostrador Virtual):
-- Si el cliente confirma querer productos (ej: 'dale', 'reservame', 'llevo'), generá un RESUMEN:
-  'Dale joya, te separo: 
-  - [Producto X] - $[Precio]
-  - [Producto Y] - $[Precio]
-  Total: $[Suma]
-  ¿Pasás por Indio I o II?'
+- Si el cliente confirma querer algo: 'Dale joya, te separo: [Producto] - $[Precio]. ¿Pasás por Indio I o II?'
 
 VISIÓN (Si hay foto):
-- Identificá la pieza (tornillo, repuesto, marca, medida).
-- SI NO ESTÁS SEGURO: 'Che, no llego a ver bien la medida o la rosca en la foto. ¿Me pasás una más de cerca o del otro lado?'
-- SI ESTÁS SEGURO: 'Eso es un [Nombre del Repuesto]. Tenemos [Opciones].'
+- Identificá la pieza. Si no estás seguro, pedí otra foto mejor ('No llego a ver bien la rosca genio, mandame otra de cerca'). No inventes.
 
-DATOS ÚTILES:
-- Alias: elindioferreteria.mp
-- Ariel Reparaciones: 10 días hábiles.
+DATOS:
+- Horarios: Lun-Vie 8-18, Sab 9-14, Dom/Fer 9-13.
 - Indio II: Carola Lorenzini 1261.
+- Alias de pago: elindioferreteria.mp
 
 PRODUCTOS RECIENTES:
 {contexto_catalog if contexto_catalog else "Sin stock rápido. Consultame en el local."}
@@ -55,17 +48,18 @@ PRODUCTOS RECIENTES:
     for api_key in LISTA_LLAVES:
         try:
             genai.configure(api_key=api_key)
-            model = genai.GenerativeModel('gemini-1.5-flash-latest')
+            # 🏹 Usamos la versión estable del modelo.
+            model = genai.GenerativeModel('gemini-1.5-flash')
             
-            # 📸 MANEJO DE FOTOS (OJOS)
+            # 📸 MANEJO DE FOTOS
             if "[IMAGE_LINK:" in input_user:
                 img_url = input_user.split("[IMAGE_LINK:")[1].split("]")[0]
-                logger.info(f"📸 Analizando imagen para Gemini...")
                 async with httpx.AsyncClient() as client:
                     resp = await client.get(img_url)
                     if resp.status_code == 200:
                         img_part = {'mime_type': 'image/jpeg', 'data': resp.content}
-                        response = await model.generate_content_async([system_prompt, img_part, f"Analizame esta foto y decime qué es."])
+                        # Usamos síncrono para Vision y Audio para mayor estabilidad
+                        response = model.generate_content([system_prompt, img_part, "Analizá esto y asesorame prolijamente como experto."])
                         if response and response.text: return response.text
                 continue
 
@@ -76,19 +70,19 @@ PRODUCTOS RECIENTES:
                     resp = await client.get(audio_url)
                     if resp.status_code == 200:
                         audio_part = {'mime_type': 'audio/ogg', 'data': resp.content}
-                        response = await model.generate_content_async([system_prompt, audio_part, f"Escuchá y respondé."])
+                        response = model.generate_content([system_prompt, audio_part, "Escuchá este audio y asesorá al cliente como experto del Indio."])
                         if response and response.text: return response.text
                 continue
 
-            # 📝 TEXTO + GOOGLE GROUNDING
+            # 📝 TEXTO + GROUNDING
             hist_text = "\n".join([f"{'Bot' if m.get('role')=='assistant' else 'Cliente'}: {m.get('content')}" for m in (historial[-5:] if historial else [])])
-            response = await model.generate_content_async(
-                contents=f"{system_prompt}\n\n{hist_text}\n\nCliente: {input_user}",
+            response = model.generate_content(
+                f"{system_prompt}\n\n{hist_text}\n\nCliente: {input_user}",
                 tools=[{'google_search_retrieval': {'dynamic_retrieval_config': {'mode': 'unspecified', 'dynamic_threshold': 0.0}}}]
             )
             
             if response and response.text: return response.text
         except Exception as e:
-            logger.error(f"Error Brain 11.0: {e}")
+            logger.error(f"Error Brain 11.1: {e}")
             continue
-    return "¡Hola genio! ¿En qué te puedo asesorar hoy? Mandame foto, audio o consultame el precio de lo que buscás."
+    return "¡Hola genio! ¿Qué estás necesitando hoy? Mandame foto, audio o consultame el precio de lo que buscás."
