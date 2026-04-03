@@ -1,4 +1,4 @@
-# agent/providers/whapi.py — Versión Indio 10.0 (Oídos y Sentido Común) 🏹🎙️🤫🦾
+# agent/providers/whapi.py — Versión Indio 11.0 (OJOS Y CARRO) 🏹📸🎙️🤫🦾
 import os, httpx, logging
 
 logger = logging.getLogger("agentkit")
@@ -29,28 +29,28 @@ class ProveedorWhapi:
                 chat_id = m.get("chat_id", "")
                 msg_id = m.get("id", "")
                 
-                # 🎙️ DETECCIÓN DE AUDIO
+                # 🎙️ AUDIO
                 if tipo in ["voice", "audio"]:
-                    # Whapi manda el link de descarga en el objeto del audio
                     media = m.get("voice", {}) or m.get("audio", {})
                     link = media.get("link", "")
                     if link:
-                        texto_audio = f"[AUDIO_LINK:{link}]"
-                        mensajes_obj.append(MensajeWhapi(chat_id, texto_audio, msg_id, de_mi))
-                        logger.info(f"🎙️ Audio recibido de {chat_id}")
+                        mensajes_obj.append(MensajeWhapi(chat_id, f"[AUDIO_LINK:{link}]", msg_id, de_mi))
                 
-                # 📝 DETECCIÓN DE TEXTO
+                # 📸 IMAGEN (OJOS)
+                elif tipo == "image":
+                    link = m.get("image", {}).get("link", "")
+                    if link:
+                        mensajes_obj.append(MensajeWhapi(chat_id, f"[IMAGE_LINK:{link}]", msg_id, de_mi))
+                        logger.info(f"📸 Foto recibida de {chat_id}")
+                
+                # 📝 TEXTO
                 elif tipo == "text":
                     texto = m.get("text", {}).get("body", "")
                     mensajes_obj.append(MensajeWhapi(chat_id, texto, msg_id, de_mi))
-                    if de_mi:
-                        logger.info(f"🕵️‍♂️ Dante respondió en el chat de {chat_id}")
-                    else:
-                        logger.info(f"📥 Mensaje de {chat_id}: {texto[:30]}...")
 
             return mensajes_obj
         except Exception as e:
-            logger.error(f"Error parseando Whapi 10.0: {e}")
+            logger.error(f"Error Whapi 11.0: {e}")
             return []
 
     async def enviar_mensaje(self, telefono, texto):
@@ -59,11 +59,7 @@ class ProveedorWhapi:
             destinatario = telefono.split("@")[0]
             payload = {"to": destinatario, "body": texto}
             headers = {"Authorization": f"Bearer {self.token}", "Content-Type": "application/json"}
-            
             async with httpx.AsyncClient() as client:
                 resp = await client.post(url, json=payload, headers=headers)
-                logger.info(f"📤 Enviando a {destinatario} | Status: {resp.status_code}")
                 return resp.status_code == 200
-        except Exception as e:
-            logger.error(f"Error enviando: {e}")
-            return False
+        except: return False
