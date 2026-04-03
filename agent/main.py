@@ -1,45 +1,50 @@
-# agent/main.py — El Indio Blindado 4.0 🏹🛡️🦾💎✨
-import os, logging, threading, sys
+# agent/main.py — El Indio EN EL BUNKER 5.0 🏹🛡️🦾💎✨🦾
+import os, logging, threading, sqlite3, requests
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request, BackgroundTasks
 from fastapi.responses import PlainTextResponse
 from dotenv import load_dotenv
 
-# 🏹 AGREGAMOS LA RUTA AL MOTOR PARA QUE NO SE PIERDA
-sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-
 load_dotenv()
 logging.basicConfig(level=logging.INFO, format="%(asctime)s agentkit: %(message)s")
 logger = logging.getLogger("agentkit")
 
+DB_PATH = os.path.join("knowledge", "catalogo.db")
+
+# 🏹 MOTOR DE SINCRONISMO INTEGRADO (BUNKER)
+def sincronizar_bunker():
+    try:
+        url = "https://ferreteriaelindio.netlify.app/data.json"
+        if not os.path.exists("knowledge"): os.makedirs("knowledge")
+        r = requests.get(url, timeout=60)
+        if r.status_code != 200: return
+        productos = r.json()
+        conn = sqlite3.connect(DB_PATH)
+        c = conn.cursor()
+        c.execute("DROP TABLE IF EXISTS productos")
+        c.execute("CREATE TABLE productos (nombre TEXT, precio REAL)")
+        batch = [(f"{p.get('name','')} {p.get('brand','')}".strip(), p.get("price", 0)) for p in productos]
+        c.executemany("INSERT INTO productos VALUES (?,?)", batch)
+        c.execute("CREATE INDEX IF NOT EXISTS idx_n ON productos(nombre)")
+        conn.commit()
+        conn.close()
+        logger.info(f"✅ BUNKER CARGADO: {len(productos)} productos.")
+    except Exception as e:
+        logger.error(f"Err Bunker: {e}")
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     try:
-        from agent import memory as m
-        await m.inicializar_db()
-        logger.info("📡 DB LISTA")
-        
-        def carga_pesada():
-            try:
-                # 🔦 LINTERNA: Buscamos el catálogo por nombre completo
-                import agent.catalogo as c
-                c.actualizar_stock_indio()
-                logger.info("✅ CATALOGO ONLINE")
-            except Exception as e:
-                logger.error(f"⚠️ Error en carga pesada: {e}")
-
-        threading.Thread(target=carga_pesada, daemon=True).start()
-    except Exception as e:
-        logger.error(f"⚠️ Error en arranque: {e}")
+        from agent.memory import inicializar_db
+        await inicializar_db()
+        threading.Thread(target=sincronizar_bunker, daemon=True).start()
+    except: pass
     yield
 
 app = FastAPI(lifespan=lifespan)
 
-@app.get("/webhook")
-async def webhook_get(): return PlainTextResponse("ok")
-
 @app.get("/")
-async def health(): return {"status": "online"}
+async def health(): return {"status": "bunker_online"}
 
 @app.post("/webhook")
 async def webhook_post(r: Request, bt: BackgroundTasks):
@@ -62,9 +67,7 @@ async def webhook_post(r: Request, bt: BackgroundTasks):
                             if await proveedor.enviar_mensaje(msg.telefono, txt):
                                 await guardar_mensaje(msg.telefono, "user", msg.texto)
                                 await guardar_mensaje(msg.telefono, "assistant", txt)
-                        except Exception as e:
-                            logger.error(f"Err proc: {e}")
+                        except: pass
                     bt.add_task(resp_async)
-    except Exception as e:
-        logger.error(f"Err global: {e}")
+    except: pass
     return PlainTextResponse("ok")
