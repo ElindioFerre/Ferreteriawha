@@ -1,4 +1,4 @@
-# agent/main.py — El Indio Blindado 3.1 🏹🛡️🦾✨
+# agent/main.py — El Indio Blindado 3.2 🏹🛡️🦾✨
 import os, logging, threading
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request, BackgroundTasks
@@ -16,11 +16,11 @@ async def lifespan(app: FastAPI):
         await inicializar_db()
         logger.info("📡 DB LISTA")
         
-        # 🏹 EL ARREGLO DE HIERRO: Importamos el módulo entero
+        # 🏹 EL ARREGLO FINAL: Importamos el Catalogo Re-bautizado
         def carga_pesada():
             try:
-                import agent.tools as t
-                t.sincronizar_catalogo() # Lo llamamos directo
+                import agent.catalogo as c
+                c.actualizar_stock_indio()
                 logger.info("✅ CATALOGO ONLINE")
             except Exception as e:
                 logger.error(f"⚠️ Error en carga pesada: {e}")
@@ -41,12 +41,12 @@ async def health(): return {"status": "online"}
 @app.post("/webhook")
 async def webhook_post(r: Request, bt: BackgroundTasks):
     try:
-        import agent.providers as p
+        from agent.providers import obtener_proveedor
         from agent.brain import generar_respuesta
         from agent.memory import guardar_mensaje, obtener_historial
         
         body = await r.json()
-        proveedor = p.obtener_proveedor()
+        proveedor = obtener_proveedor()
         mensajes = await proveedor.parsear_webhook(raw_body=body)
         
         if mensajes:
