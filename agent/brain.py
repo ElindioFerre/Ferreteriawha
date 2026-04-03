@@ -1,6 +1,16 @@
-# agent/brain.py — El Indio EXPERTO DEL MOSTRADOR 🏹🦾📚✨🦾
-import os, logging, asyncio, datetime, google.generativeai as genai
-from .catalogo import buscar_precio # 🏹 VECINOS
+# agent/brain.py — El Indio EXPERTO DEL MOSTRADOR 4.0 🏹🦾📚✨🦾
+import os, logging, asyncio, datetime, sys
+import google.generativeai as genai
+
+# 🏹 ASEGURAMOS QUE EL CEREBRO VEA EL CATÁLOGO
+BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+if BASE_DIR not in sys.path: sys.path.append(BASE_DIR)
+
+try:
+    from agent.catalogo import buscar_precio # 🏹 IMPORTACIÓN ABSOLUTA
+except ImportError:
+    # Fallback por si acaso correr local sin paquete
+    from catalogo import buscar_precio
 
 logger = logging.getLogger("agentkit")
 
@@ -39,8 +49,7 @@ DATOS DEL LOCAL (STOCK Y PRECIOS):
             for name in model_names:
                 try:
                     model = genai.GenerativeModel(name)
-                    # 🚀 MENSAJE DIRECTO
-                    response = await model.generate_content_async(f"{system_prompt}\n\nMensaje reciente: {mensaje_usuario}")
+                    response = await model.generate_content_async(f"{system_prompt}\n\nCliente: {mensaje_usuario}")
                     if response and hasattr(response, 'text') and response.text:
                         return response.text
                 except: continue
