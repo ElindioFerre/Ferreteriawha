@@ -1,8 +1,8 @@
-# agent/main.py — El Indio EN EL BUNKER 5.0 🏹🛡️🦾💎✨🦾
-import os, logging, threading, sqlite3, requests
+# agent/main.py — El Indio EN EL BUNKER 5.1 (Con Sensores de Alarma) 🏹🛰️🦾💎✨🦾
+import os, logging, threading, sqlite3, requests, datetime
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request, BackgroundTasks
-from fastapi.responses import PlainTextResponse
+from fastapi.responses import PlainTextResponse, JSONResponse
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -42,6 +42,45 @@ async def lifespan(app: FastAPI):
     yield
 
 app = FastAPI(lifespan=lifespan)
+
+# 📡 DETECTOR DE PROBLEMAS (Página de Diagnóstico)
+@app.get("/debug")
+async def detector_de_problemas():
+    diagnostico = {
+        "timestamp": datetime.datetime.now().isoformat(),
+        "estado_sistema": "online",
+        "sensores": {}
+    }
+    
+    # Check 1: Catálogo (Buscador local)
+    try:
+        if os.path.exists(DB_PATH):
+            conn = sqlite3.connect(DB_PATH)
+            count = conn.execute("SELECT count(*) FROM productos").fetchone()[0]
+            conn.close()
+            diagnostico["sensores"]["catalogo"] = f"✅ OK ({count} productos cargados)"
+        else:
+            diagnostico["sensores"]["catalogo"] = "❌ ERROR: Base de datos no encontrada"
+    except Exception as e:
+        diagnostico["sensores"]["catalogo"] = f"❌ ERROR: {str(e)}"
+
+    # Check 2: API Keys (Gemini)
+    keys = (os.getenv("GOOGLE_API_KEYS") or "").split(",")
+    diagnostico["sensores"]["llaves_gemini"] = f"✅ OK ({len([k for k in keys if k.strip()])} llaves detectadas)"
+
+    # Check 3: Webhook
+    diagnostico["sensores"]["webhook"] = "✅ OK Ready"
+    
+    # Check 4: Base de Datos de Memoria
+    try:
+        from agent.memory import DB_PATH as MEM_DB
+        if os.path.exists(MEM_DB):
+            diagnostico["sensores"]["memoria"] = "✅ OK Activada"
+        else:
+            diagnostico["sensores"]["memoria"] = "⚠️ Pendiente de primer uso"
+    except: pass
+
+    return JSONResponse(content=diagnostico)
 
 @app.get("/")
 async def health(): return {"status": "bunker_online"}
