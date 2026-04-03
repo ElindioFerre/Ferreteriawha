@@ -1,4 +1,4 @@
-# agent/main.py — El Indio Blindado 3.2 🏹🛡️🦾✨
+# agent/main.py — El Indio Blindado 3.3 🏹🛡️🦾⚡
 import os, logging, threading
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request, BackgroundTasks
@@ -12,14 +12,13 @@ logger = logging.getLogger("agentkit")
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     try:
-        from agent.memory import inicializar_db
-        await inicializar_db()
+        from . import memory as m # Importación de vecino
+        await m.inicializar_db()
         logger.info("📡 DB LISTA")
         
-        # 🏹 EL ARREGLO FINAL: Importamos el Catalogo Re-bautizado
         def carga_pesada():
             try:
-                import agent.catalogo as c
+                from . import catalogo as c # Importación de vecino
                 c.actualizar_stock_indio()
                 logger.info("✅ CATALOGO ONLINE")
             except Exception as e:
@@ -41,12 +40,12 @@ async def health(): return {"status": "online"}
 @app.post("/webhook")
 async def webhook_post(r: Request, bt: BackgroundTasks):
     try:
-        from agent.providers import obtener_proveedor
-        from agent.brain import generar_respuesta
-        from agent.memory import guardar_mensaje, obtener_historial
+        from . import providers as p
+        from . import brain as b
+        from . import memory as m
         
         body = await r.json()
-        proveedor = obtener_proveedor()
+        proveedor = p.obtener_proveedor()
         mensajes = await proveedor.parsear_webhook(raw_body=body)
         
         if mensajes:
@@ -54,12 +53,14 @@ async def webhook_post(r: Request, bt: BackgroundTasks):
                 if not msg.es_propio and msg.texto:
                     async def resp_async():
                         try:
-                            h = await obtener_historial(msg.telefono)
-                            txt = await generar_respuesta(msg.texto, h)
+                            h = await m.obtener_historial(msg.telefono)
+                            txt = await b.generar_respuesta(msg.texto, h)
                             if await proveedor.enviar_mensaje(msg.telefono, txt):
-                                await guardar_mensaje(msg.telefono, "user", msg.texto)
-                                await guardar_mensaje(msg.telefono, "assistant", txt)
-                        except: pass
+                                await m.guardar_mensaje(msg.telefono, "user", msg.texto)
+                                await m.guardar_mensaje(msg.telefono, "assistant", txt)
+                        except Exception as e:
+                            logger.error(f"Err proc: {e}")
                     bt.add_task(resp_async)
-    except: pass
+    except Exception as e:
+        logger.error(f"Err global: {e}")
     return PlainTextResponse("ok")
