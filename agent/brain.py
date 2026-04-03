@@ -1,6 +1,5 @@
-# agent/brain.py — El Indio 11.5 (MOTOR ACTIVADO) 🏹🛡️🦾💎✨🦾
+# agent/brain.py — El Indio 11.6 (V1 STABLE) 🏹🛡️🦾💎✨🦾
 import os, logging, asyncio, sqlite3, httpx, time
-# 🏹 Importamos de forma directa para evitar conflictos de nombres de Google
 from google.genai import Client, types
 
 logger = logging.getLogger("agentkit")
@@ -25,30 +24,26 @@ raw_keys = os.getenv("GOOGLE_API_KEYS") or os.getenv("GOOGLE_API_KEY") or ""
 LISTA_LLAVES = [k.strip() for k in raw_keys.split(",") if k.strip()]
 
 async def generar_respuesta(input_user, historial):
-    # 🏹 IDENTIDAD EXPERTA 11.5
     system_prompt_base = f"""
 Sos el experto de mostrador de 'Ferretería El Indio'. ULTRA-CONCISO Y SIMPLIFICADO. 🏹🛡️🦾
 
 TU MISIÓN COMO ASESOR:
-1. Si te preguntan 'CÓMO HACER ALGO' (reparaciones/uniones/problemas): Buscá en internet y explicá la solución técnica cortito y al pie, como un ferretero de barrio.
+1. Si te preguntan 'CÓMO HACER ALGO': Buscá en Google y explicá la solución técnica cortito y al pie, como un ferretero de barrio.
 2. Simplificá todo lo que diga Google. Tirá el consejo útil de frente.
-3. Al final, decí si tenemos los materiales necessários repasando la lista rápida.
+3. Al final, decí si tenemos los materiales repasando tu lista rápida.
 
-REGLA DE CARRO (Mostrador Virtual):
-- Si confirma querer algo: 'Dale joya, te separo: [Producto] - $[Precio]. ¿Pasás por Indio I o II?'
-
-VISIÓN: Identificá piezas. Si dudás, pedí más fotos ('No llego a ver bien la rosca, mandame otra de cerca').
+REGLA DE CARRO (Mostrador Virtual): Confirmá pedidos con precio y reserva.
 
 MÁS INFO: Lun-Vie 8-18, Sab 9-14, Dom/Fer 9-13. Indio II: Carola Lorenzini 1261. Alias: elindioferreteria.mp
 """.strip()
 
     for api_key in LISTA_LLAVES:
         try:
-            # 🏹 CLIENTE OFICIAL DE GOOGLE GENAI (Iniciamos directo)
-            client = Client(api_key=api_key)
+            # 🏹 FORZAMOS LA VERSIÓN ESTABLE V1 PARA EVITAR EL 404
+            client = Client(api_key=api_key, http_options={"api_version": "v1"})
             model_id = "gemini-1.5-flash"
             
-            # 🎙️ PASO 1: TRANSCRIPCIÓN (Oído de Escribano)
+            # 🎙️ TRANSCRIPCIÓN
             if "[AUDIO_LINK:" in input_user:
                 audio_url = input_user.split("[AUDIO_LINK:")[1].split("]")[0]
                 async with httpx.AsyncClient() as client_http:
@@ -57,13 +52,11 @@ MÁS INFO: Lun-Vie 8-18, Sab 9-14, Dom/Fer 9-13. Indio II: Carola Lorenzini 1261
                         audio_part = types.Part.from_bytes(data=resp.content, mime_type="audio/ogg")
                         t_resp = client.models.generate_content(
                             model=model_id,
-                            contents=[audio_part, "Traduci este audio a texto de ferretería prolijo."]
+                            contents=[audio_part, "Traduci este audio a texto de ferretería."]
                         )
-                        if t_resp and t_resp.text:
-                            input_user = t_resp.text
-                            logger.info(f"✍️ Transcripción: {input_user}")
-            
-            # 📸 PASO 2: VISIÓN (Ojos de Águila)
+                        if t_resp and t_resp.text: input_user = t_resp.text
+
+            # 📸 VISIÓN
             contexto_adicional = ""
             if "[IMAGE_LINK:" in input_user:
                 img_url = input_user.split("[IMAGE_LINK:")[1].split("]")[0]
@@ -75,22 +68,21 @@ MÁS INFO: Lun-Vie 8-18, Sab 9-14, Dom/Fer 9-13. Indio II: Carola Lorenzini 1261
                         if v_resp and v_resp.text:
                             contexto_adicional = f"\nINFO IMAGEN: El cliente mando foto de: {v_resp.text}"
 
-            # 🕵️‍♂️ PASO 3: BÚSQUEDA Y ASESORAMIENTO FINAL
+            # 🕵️‍♂️ FINAL
             contexto_catalog = buscar_en_el_catalogo(input_user)
             prompt_final = f"{system_prompt_base}\n{contexto_adicional}\n\nCATÁLOGO:\n{contexto_catalog if contexto_catalog else 'Sin stock inmediato.'}"
             
-            hist_text = "\n".join([f"{'Bot' if m.get('role')=='assistant' else 'Cliente'}: {m.get('content')}" for m in (historial[-5:] if historial else [])])
             config = types.GenerateContentConfig(
                 tools=[types.Tool(google_search=types.GoogleSearchGrounding())]
             )
             
             response = client.models.generate_content(
                 model=model_id,
-                contents=f"{prompt_final}\n\n{hist_text}\n\nCliente: {input_user}",
+                contents=f"{prompt_final}\n\nCliente: {input_user}",
                 config=config
             )
             if response and response.text: return response.text
         except Exception as e:
-            logger.error(f"Error Brain 11.5 (Conflict Fix): {e}")
+            logger.error(f"Error Brain 11.6 (V1 Fix): {e}")
             continue
-    return "¡Hola genio! ¿En qué te asesoro hoy?"
+    return "¡Hola genio! ¿En qué te asesoro?"
