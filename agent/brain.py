@@ -1,6 +1,7 @@
-# agent/brain.py — El Indio 11.1 ESTABLE 🏹🛡️🦾💎✨🦾
+# agent/brain.py — El Indio 11.2 (SUPER ESTABLE - GOOGLE GENAI) 🏹🛡️🦾💎✨🦾
 import os, logging, asyncio, sqlite3, httpx, time
-import google.generativeai as genai
+from google import genai
+from google.genai import types
 
 logger = logging.getLogger("agentkit")
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -26,7 +27,7 @@ LISTA_LLAVES = [k.strip() for k in raw_keys.split(",") if k.strip()]
 async def generar_respuesta(input_user, historial):
     contexto_catalog = buscar_en_el_catalogo(input_user)
     
-    # 🏹 IDENTIDAD EXPERTA (ADN DANTE/DAIANA)
+    # 🏹 IDENTIDAD EXPERTA (ADN BARRIO 11.2)
     system_prompt = f"""
 Sos el experto de mostrador de 'Ferretería El Indio'. ULTRA-CONCISO. 🏹🛡️🦾
 
@@ -47,42 +48,54 @@ PRODUCTOS RECIENTES:
 
     for api_key in LISTA_LLAVES:
         try:
-            genai.configure(api_key=api_key)
-            # 🏹 Usamos la versión estable del modelo.
-            model = genai.GenerativeModel('gemini-1.5-flash')
+            # 🏹 CLIENTE OFICIAL DE GOOGLE GENAI
+            client = genai.Client(api_key=api_key)
+            model_id = "gemini-1.5-flash"
             
-            # 📸 MANEJO DE FOTOS
+            # 📸 MANEJO DE FOTOS (OJOS)
             if "[IMAGE_LINK:" in input_user:
                 img_url = input_user.split("[IMAGE_LINK:")[1].split("]")[0]
-                async with httpx.AsyncClient() as client:
-                    resp = await client.get(img_url)
+                logger.info(f"📸 Procesando visión...")
+                async with httpx.AsyncClient() as client_http:
+                    resp = await client_http.get(img_url)
                     if resp.status_code == 200:
-                        img_part = {'mime_type': 'image/jpeg', 'data': resp.content}
-                        # Usamos síncrono para Vision y Audio para mayor estabilidad
-                        response = model.generate_content([system_prompt, img_part, "Analizá esto y asesorame prolijamente como experto."])
+                        image = types.Part.from_bytes(data=resp.content, mime_type="image/jpeg")
+                        response = client.models.generate_content(
+                            model=model_id,
+                            contents=[system_prompt, image, "Identifica el repuesto de ferretería en la foto."]
+                        )
                         if response and response.text: return response.text
                 continue
 
-            # 🎙️ MANEJO DE AUDIOS
+            # 🎙️ MANEJO DE AUDIOS (OÍDOS)
             if "[AUDIO_LINK:" in input_user:
                 audio_url = input_user.split("[AUDIO_LINK:")[1].split("]")[0]
-                async with httpx.AsyncClient() as client:
-                    resp = await client.get(audio_url)
+                logger.info(f"🎙️ Procesando audio...")
+                async with httpx.AsyncClient() as client_http:
+                    resp = await client_http.get(audio_url)
                     if resp.status_code == 200:
-                        audio_part = {'mime_type': 'audio/ogg', 'data': resp.content}
-                        response = model.generate_content([system_prompt, audio_part, "Escuchá este audio y asesorá al cliente como experto del Indio."])
+                        audio = types.Part.from_bytes(data=resp.content, mime_type="audio/ogg")
+                        response = client.models.generate_content(
+                            model=model_id,
+                            contents=[system_prompt, audio, "Responde al cliente basándote en su audio."]
+                        )
                         if response and response.text: return response.text
                 continue
 
-            # 📝 TEXTO + GROUNDING
+            # 📝 TEXTO Y GROUNDING
             hist_text = "\n".join([f"{'Bot' if m.get('role')=='assistant' else 'Cliente'}: {m.get('content')}" for m in (historial[-5:] if historial else [])])
-            response = model.generate_content(
-                f"{system_prompt}\n\n{hist_text}\n\nCliente: {input_user}",
-                tools=[{'google_search_retrieval': {'dynamic_retrieval_config': {'mode': 'unspecified', 'dynamic_threshold': 0.0}}}]
+            config = types.GenerateContentConfig(
+                tools=[types.Tool(google_search=types.GoogleSearchGrounding())]
+            )
+            
+            response = client.models.generate_content(
+                model=model_id,
+                contents=f"{system_prompt}\n\n{hist_text}\n\nCliente: {input_user}",
+                config=config
             )
             
             if response and response.text: return response.text
         except Exception as e:
-            logger.error(f"Error Brain 11.1: {e}")
+            logger.error(f"Error Brain 11.2 (GenAI): {e}")
             continue
     return "¡Hola genio! ¿Qué estás necesitando hoy? Mandame foto, audio o consultame el precio de lo que buscás."
