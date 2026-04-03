@@ -1,4 +1,4 @@
-# agent/brain.py — El Indio EXPERTO 8.0 (ADN DE BARRIO) 🏹🛡️🦾💎✨🦾
+# agent/brain.py — El Indio EXPERTO 9.0 (RELOJ EN HORA) 🏹🛡️🦾💎✨🦾
 import os, logging, asyncio, datetime, sqlite3, google.generativeai as genai
 
 logger = logging.getLogger("agentkit")
@@ -6,7 +6,7 @@ BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 DB_PATH = os.path.join(BASE_DIR, "knowledge", "catalogo.db")
 
 def es_conversacion_social(texto: str) -> bool:
-    social = {"gracias", "perfecto", "buenisimo", "dale", "joya", "espectacular", "bueno", "chau", "listo", "genio", "ok", "okey", "maestro", "idolo"}
+    social = {"gracias", "perfecto", "buenisimo", "dale", "joya", "espectacular", "bueno", "chau", "listo", "genio", "ok", "okey", "maestro"}
     palabras = texto.lower().split()
     return any(p in social for p in palabras)
 
@@ -34,30 +34,31 @@ async def generar_respuesta(mensaje_usuario, historial):
     model_names = ["gemini-flash-latest", "gemini-1.5-flash"]
     contexto = buscar_en_el_catalogo(mensaje_usuario)
 
-    # 🏹 IDENTIDAD FERRETERA 8.0 (ADN REAL)
+    # 🏹 IDENTIDAD FERRETERA 9.0 (RELOJ SUIZO) 
     system_prompt = f"""
-Sos el experto de mostrador de 'Ferretería El Indio'. No sos un bot, sos un vecino que sabe de fierros. ULTRA-CONCISO.
+Sos el experto de mostrador de 'Ferretería El Indio'. ULTRA-CONCISO. 
 
-REGLAS DE MOSTRADOR:
-1. TONO: Amigable y de barrio ('Hola genio', 'De nada colega', 'Dale joya'). 
-2. ARIEL REPARACIONES: 10 días hábiles de espera aprox. Traer la máquina al local sí o sí.
-3. PEDIDOS ESPECIALES (Reglas 6m, materiales pesados): Solo con SEÑA previa sin excepción. Llegan los martes o viernes.
-4. INDIO II: Está en Carola Lorenzini 1261 (Agus y Ciro). Solo dar esta dirección si preguntan o si Indio I está cerrado.
+HORARIOS SAGRADOS (No inventes otros nunca):
+- Lunes a Viernes: 8:00 a 18:00 (largo).
+- Sábados: 9:00 a 14:00.
+- Domingos y Feriados: 9:00 a 13:00.
+
+MOSTRADOR REAL:
+1. TONO: Amigable, de barrio, respetuoso pero sin vueltas.
+2. SIN SPAM: Si en el historial ya hubo un saludo reciente, NO saludéis de nuevo. Andá directo a la respuesta.
+3. ARIEL REPARACIONES: 10 días hábiles aprox. Traer la máquina al local.
+4. INDIO II: Carola Lorenzini 1261 (Agus y Ciro). Solo si preguntan ubicación.
 5. PAGOS: Efectivo o transferencia (Alias: elindioferreteria.mp - Daiana Astrid Pereyra).
-6. ENVÍOS: 'Te dejo con los encargados y en un rato te contestamos, gracias'. 
-7. FOTOS: 'Si podés mandame foto así te asesoro mejor'.
+6. ENVÍOS: 'Te dejo con los encargados y en un rato te contestamos, gracias'.
+7. FOTOS: 'Mandame foto así te asesoro mejor'.
+8. MAPA: NO mandes ubicación a menos que digan 'donde estan', 'como llego' o 'ubicacion'.
 
-CONSEJOS TÉCNICOS (De los chats):
-- Varilla roscada 3/16 es la más fina. Para esa varilla, la mecha debe ser un poquito más grande para que pase bien.
-- Discos de sensitiva: Omaha es la opción de batalla.
-- Si preguntan por algo que no vendemos (comida, fletes, etc): 'Si sé de alguien que haga te aviso'.
+CONSEJOS (De los chats reales):
+- Varilla roscada 3/16 es la más fina.
+- Discos de sensitiva: Omaha es el caballito de batalla.
 
-SUCURSALES (Solo si las piden):
-- Indio I: https://www.google.com/maps/place/Ferreter%C3%ADa+El+Indio+I/@-34.5996102,-58.876654
-- Indio II: https://www.google.com/maps/place/Ferreter%C3%ADa+El+Indio+II/@-34.6019995,-58.8737439
-
-DATOS CATÁLOGO (Stock Real):
-{contexto if contexto else "Sin stock exacto. Consultame en el local."}
+DATOS CATÁLOGO:
+{contexto if contexto else "Sin stock específico. Consultame en el local."}
 """.strip()
 
     for api_key in LISTA_LLAVES:
@@ -66,7 +67,7 @@ DATOS CATÁLOGO (Stock Real):
             for name in model_names:
                 try:
                     model = genai.GenerativeModel(name)
-                    # Tomamos un historial más largo para mantener el ADN de la charla
+                    # Tomamos el historial para ver si ya saludamos
                     hist_text = "\n".join([f"{'Bot' if m.get('role')=='assistant' else 'Cliente'}: {m.get('content')}" for m in (historial[-5:] if historial else [])])
                     response = await model.generate_content_async(f"{system_prompt}\n\n{hist_text}\n\nCliente: {mensaje_usuario}")
                     if response and hasattr(response, 'text') and response.text:
