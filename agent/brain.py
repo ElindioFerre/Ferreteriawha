@@ -1,52 +1,82 @@
-# agent/brain.py — El Indio EXPERTO 5.3 🏹🛡️🦾💎✨🦾
+# agent/brain.py — El Indio EXPERTO 5.4 🏹🛡️🦾💎✨🦾
 import os, logging, asyncio, datetime, sqlite3, google.generativeai as genai
 
 logger = logging.getLogger("agentkit")
-# 🏹 RUTA ABSOLUTA PARA NO FALLAR EN RAILWAY
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 DB_PATH = os.path.join(BASE_DIR, "knowledge", "catalogo.db")
 
-# 🔍 EL MOTOR DE BÚSQUEDA AGRESIVO (BUNKER)
+# 🏹 MOTOR DE BÚSQUEDA "LASER" (Antivirus de Repuestos de Auto)
 def buscar_en_el_catalogo(consulta: str) -> str:
-    """Buscador hiper-agresivo para que el Indio no se guarde nada"""
+    """Buscador que ignora el ruido y se centra en el producto real"""
     if not os.path.exists(DB_PATH): return ""
-    limpia = consulta.lower().replace("?", "").replace("!", "").replace(",", "").replace(".", "")
+    
+    # 1. Limpieza extrema del ruido
+    limpia = consulta.lower()
+    for char in "?!,.:;()": limpia = limpia.replace(char, "")
+    
+    # Palabras que NO debemos buscar nunca en la DB
+    ruido = {
+        "precio", "cuanto", "sale", "tenes", "alguna", "quiero", "usar", "cortar", "unos", 
+        "fierros", "para", "recomendame", "decime", "esto", "esta", "estos", "estas",
+        "horario", "donde", "estan", "venden", "tenen", "tienen", "tenas", "podes", "pasas"
+    }
+    
+    # 2. Diccionario de corrección
     vocabulario = {
         "moladora": "amoladora", "moladoras": "amoladora", 
-        "fresa": "fresadora", "agujereadora": "taladro",
-        "amoladora": "amoladora", "taladro": "taladro"
+        "fresa": "fresadora", "agujereadora": "taladro"
     }
-    # Filtramos palabras vacias y cortas (pero permitimos de 3 letras como 'pvc')
-    palabras = [p for p in limpia.split() if len(p) >= 3]
-    busqueda = []
-    for p in palabras:
-        busqueda.append(p)
-        if p.endswith("s"): busqueda.append(p[:-1]) # plurales
-        if p in vocabulario: busqueda.append(vocabulario[p])
+
+    palabras_raw = limpia.split()
+    palabras_clave = []
     
+    for p in palabras_raw:
+        if p in ruido or len(p) < 3: continue
+        # Corregimos si es necesario
+        p_final = vocabulario.get(p, p)
+        palabras_clave.append(p_final)
+
+    if not palabras_clave: return ""
+
     try:
         conn = sqlite3.connect(DB_PATH)
         c = conn.cursor()
         
-        # 🛡️ NORMALIZACIÓN DE BÚSQUEDA: Buscamos coincidencias que tengan alguna de las palabras clave
-        unique_words = list(set(busqueda))
-        if not unique_words: return ""
+        # 🏹 ESTRATEGIA LASER: 
+        # Buscamos que el nombre tenga AL MENOS la palabra más importante (la primera)
+        principal = palabras_clave[0]
         
-        where_clauses = ["nombre LIKE ?" for _ in unique_words]
-        params = [f"%{p}%" for p in unique_words]
+        # Generamos el filtro: El producto DEBE contener la palabra principal
+        # Y opcionalmente las otras
+        sub_filtros = []
+        params = [f"%{principal}%"]
+        for p in palabras_clave[1:]:
+            sub_filtros.append("nombre LIKE ?")
+            params.append(f"%{p}%")
+            
+        sql = f"SELECT nombre, precio FROM productos WHERE nombre LIKE ?"
+        if sub_filtros:
+            # Si hay más palabras, tratamos de que coincidan todas (AND) para ser precisos
+            sql += " AND " + " AND ".join(sub_filtros)
         
-        # Buscamos un poco más para tener de dónde elegir (10 resultados)
-        sql = f"SELECT nombre, precio FROM productos WHERE {' OR '.join(where_clauses)} LIMIT 10"
+        sql += " LIMIT 10"
+        
         c.execute(sql, params)
         res = c.fetchall()
+        
+        # Si no encontró con AND (demasiado estricto), probamos con OR pero solo para la principal
+        if not res:
+            sql = "SELECT nombre, precio FROM productos WHERE nombre LIKE ? LIMIT 8"
+            c.execute(sql, [f"%{principal}%"])
+            res = c.fetchall()
+            
         conn.close()
         
         if res:
-            # Mostramos el nombre real y el precio para que la IA actúe
             return "\n".join([f"- {r[0]}: ${r[1]:,.0f}" for r in res])
         return ""
     except Exception as e:
-        logger.error(f"Error buscador interno: {e}")
+        logger.error(f"Error buscador laser: {e}")
         return ""
 
 raw_keys = os.getenv("GOOGLE_API_KEYS") or os.getenv("GOOGLE_API_KEY") or ""
@@ -55,32 +85,25 @@ LISTA_LLAVES = [k.strip() for k in raw_keys.split(",") if k.strip()]
 async def generar_respuesta(mensaje_usuario, historial):
     model_names = ["gemini-flash-latest", "gemini-1.5-flash", "gemini-pro"]
     
-    # BUSCAMOS DIRECTO EN EL MOTOR INTERNO
     contexto = ""
     try:
         contexto = buscar_en_el_catalogo(mensaje_usuario)
     except: pass
 
-    # 🏹 LOS HORARIOS SON SAGRADOS
-    # Lunes a viernes de 8 a 18, Sabados de 9 a 14, domingos y Feriados de 9 a 13
-    
     system_prompt = f"""
-Sos el experto de mostrador de 'Ferretería El Indio'. Sé un ferretero directo, técnico y comercial.
+Sos el experto de mostrador de 'Ferretería El Indio'. Sé directo y muy profesional.
 
-HORARIOS OFICIALES:
-- Lunes a Viernes: 8:00 a 18:00
-- Sábados: 9:00 a 14:00
-- Domingos y Feriados: 9:00 a 13:00
+HORARIOS: Lun-Vie 8-18, Sáb 9-14, Dom/Fér 9-13.
 
 REGLAS DE ORO:
-1. NO SALUDES si el cliente ya te habló en el historial. No seas repetitivo.
-2. PRECIOS: Si el cliente pide precio, mirá los DATOS reales abajo y dale opciones con el nombre tal cual aparece.
-3. SI HAY DATOS: No digas "voy a consultar", decí "Tengo estas opciones..." y dale el precio.
-4. SI NO HAY DATOS: Ahí sí decile que vas a consultar el stock exacto para no fallarle.
-5. NO menciones códigos internos ni proveedores.
+1. NO SALUDES si el historial muestra que ya lo hiciste.
+2. PRECIOS: Si el cliente pide precio, mirá los DATOS reales abajo. 
+3. SI ves repuestos de autos (Renault, Fiat, Ford) y el cliente pidió una HERRAMIENTA ferretera (Amoladora, Taladro), IGNORA los autos. No ofrezcas patines de freno si te piden una amoladora.
+4. Si los datos abajo coinciden con lo pedido, dale las opciones y el precio TAL CUAL aparece.
+5. NO menciones códigos ni proveedores.
 
-DATOS DEL CATÁLOGO REAL PARA ESTA CONSULTA:
-{contexto if contexto else "No se encontraron coincidencias exactas en el catálogo local."}
+DATOS DEL CATÁLOGO REAL:
+{contexto if contexto else "No se encontraron herramientas específicas en la lista rápida."}
 """.strip()
 
     for api_key in LISTA_LLAVES:
@@ -94,4 +117,4 @@ DATOS DEL CATÁLOGO REAL PARA ESTA CONSULTA:
                         return response.text
                 except: continue
         except: continue
-    return "¡Hola! Bienvenido a 'El Indio'. ¿En qué te puedo asesorar hoy?"
+    return "¡Hola! Bienvenido a 'El Indio'. ¿En qué fierros te puedo ayudar hoy?"
