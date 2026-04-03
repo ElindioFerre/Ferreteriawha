@@ -1,9 +1,12 @@
-# agent/main.py — El Indio Blindado 3.3 🏹🛡️🦾⚡
-import os, logging, threading
+# agent/main.py — El Indio Blindado 4.0 🏹🛡️🦾💎✨
+import os, logging, threading, sys
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request, BackgroundTasks
 from fastapi.responses import PlainTextResponse
 from dotenv import load_dotenv
+
+# 🏹 AGREGAMOS LA RUTA AL MOTOR PARA QUE NO SE PIERDA
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 load_dotenv()
 logging.basicConfig(level=logging.INFO, format="%(asctime)s agentkit: %(message)s")
@@ -12,13 +15,14 @@ logger = logging.getLogger("agentkit")
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     try:
-        from . import memory as m # Importación de vecino
+        from agent import memory as m
         await m.inicializar_db()
         logger.info("📡 DB LISTA")
         
         def carga_pesada():
             try:
-                from . import catalogo as c # Importación de vecino
+                # 🔦 LINTERNA: Buscamos el catálogo por nombre completo
+                import agent.catalogo as c
                 c.actualizar_stock_indio()
                 logger.info("✅ CATALOGO ONLINE")
             except Exception as e:
@@ -40,12 +44,12 @@ async def health(): return {"status": "online"}
 @app.post("/webhook")
 async def webhook_post(r: Request, bt: BackgroundTasks):
     try:
-        from . import providers as p
-        from . import brain as b
-        from . import memory as m
+        from agent.providers import obtener_proveedor
+        from agent.brain import generar_respuesta
+        from agent.memory import guardar_mensaje, obtener_historial
         
         body = await r.json()
-        proveedor = p.obtener_proveedor()
+        proveedor = obtener_proveedor()
         mensajes = await proveedor.parsear_webhook(raw_body=body)
         
         if mensajes:
@@ -53,11 +57,11 @@ async def webhook_post(r: Request, bt: BackgroundTasks):
                 if not msg.es_propio and msg.texto:
                     async def resp_async():
                         try:
-                            h = await m.obtener_historial(msg.telefono)
-                            txt = await b.generar_respuesta(msg.texto, h)
+                            h = await obtener_historial(msg.telefono)
+                            txt = await generar_respuesta(msg.texto, h)
                             if await proveedor.enviar_mensaje(msg.telefono, txt):
-                                await m.guardar_mensaje(msg.telefono, "user", msg.texto)
-                                await m.guardar_mensaje(msg.telefono, "assistant", txt)
+                                await guardar_mensaje(msg.telefono, "user", msg.texto)
+                                await guardar_mensaje(msg.telefono, "assistant", txt)
                         except Exception as e:
                             logger.error(f"Err proc: {e}")
                     bt.add_task(resp_async)
