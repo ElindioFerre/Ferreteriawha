@@ -1,6 +1,5 @@
-# agent/providers/whapi.py — Versión Indio 11.0 (OJOS Y CARRO) 🏹📸🎙️🤫🦾
+# agent/providers/whapi.py — Versión Indio 11.2 (DIRECT AUTH) 🏹📧🤫🦾
 import os, httpx, logging
-
 logger = logging.getLogger("agentkit")
 
 class MensajeWhapi:
@@ -29,37 +28,34 @@ class ProveedorWhapi:
                 chat_id = m.get("chat_id", "")
                 msg_id = m.get("id", "")
                 
-                # 🎙️ AUDIO
                 if tipo in ["voice", "audio"]:
                     media = m.get("voice", {}) or m.get("audio", {})
                     link = media.get("link", "")
-                    if link:
-                        mensajes_obj.append(MensajeWhapi(chat_id, f"[AUDIO_LINK:{link}]", msg_id, de_mi))
-                
-                # 📸 IMAGEN (OJOS)
+                    if link: mensajes_obj.append(MensajeWhapi(chat_id, f"[AUDIO_LINK:{link}]", msg_id, de_mi))
                 elif tipo == "image":
                     link = m.get("image", {}).get("link", "")
-                    if link:
-                        mensajes_obj.append(MensajeWhapi(chat_id, f"[IMAGE_LINK:{link}]", msg_id, de_mi))
-                        logger.info(f"📸 Foto recibida de {chat_id}")
-                
-                # 📝 TEXTO
+                    if link: mensajes_obj.append(MensajeWhapi(chat_id, f"[IMAGE_LINK:{link}]", msg_id, de_mi))
                 elif tipo == "text":
                     texto = m.get("text", {}).get("body", "")
                     mensajes_obj.append(MensajeWhapi(chat_id, texto, msg_id, de_mi))
-
             return mensajes_obj
         except Exception as e:
-            logger.error(f"Error Whapi 11.0: {e}")
+            logger.error(f"Error Parse 11.2: {e}")
             return []
 
     async def enviar_mensaje(self, telefono, texto):
         try:
             url = f"{self.url_base}/messages/text"
-            destinatario = telefono.split("@")[0]
-            payload = {"to": destinatario, "body": texto}
-            headers = {"Authorization": f"Bearer {self.token}", "Content-Type": "application/json"}
+            # Aseguramos el chatId completo si no lo tiene
+            chat_id = telefono if "@" in telefono else f"{telefono}@s.whatsapp.net"
+            payload = {"to": chat_id, "body": texto}
+            # Probamos el Token directo (Casi siempre funciona mejor así en Whapi)
+            headers = {"Authorization": self.token, "Content-Type": "application/json"}
             async with httpx.AsyncClient() as client:
                 resp = await client.post(url, json=payload, headers=headers)
+                if resp.status_code != 200:
+                    logger.error(f"Error Envío 11.2: {resp.status_code} - {resp.text}")
                 return resp.status_code == 200
-        except: return False
+        except Exception as e:
+            logger.error(f"Error Envío 11.2 (Exception): {e}")
+            return False
