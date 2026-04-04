@@ -1,4 +1,4 @@
-# agent/brain.py — El Indio 11.10 (RETORNO A LA ESTABILIDAD V1) 🏹🛡️🦾💎✨🦾
+# agent/brain.py — El Indio 11.11 (ESTABILIDAD TOTAL V1) 🏹🛡️🦾💎✨🦾
 import os, logging, sqlite3, httpx
 from google.genai import Client, types
 
@@ -24,11 +24,11 @@ raw_keys = os.getenv("GOOGLE_API_KEYS") or os.getenv("GOOGLE_API_KEY") or ""
 LISTA_LLAVES = [k.strip() for k in raw_keys.split(",") if k.strip()]
 
 async def generar_respuesta(input_user, historial):
-    system_prompt = "Sos el experto de Ferretería El Indio (C. Lorenzini 1261). Ultra-conciso y amable. Da consejos técnicos y busca precios."
+    system_prompt = "Sos el experto de Ferretería El Indio (Carola Lorenzini 1261). Ultra-conciso y amable. Da consejos técnicos y busca precios."
     
     for api_key in LISTA_LLAVES:
         try:
-            # 🏹 CLIENTE FORZADO A V1 (Más estable para Flash 1.5)
+            # 🏹 CLIENTE ESTABLE V1
             client = Client(api_key=api_key, http_options={'api_version': 'v1'})
             model_id = "gemini-1.5-flash"
             
@@ -39,7 +39,7 @@ async def generar_respuesta(input_user, historial):
                     resp = await h_client.get(url)
                     if resp.status_code == 200:
                         part = types.Part.from_bytes(data=resp.content, mime_type="audio/ogg")
-                        t_res = client.models.generate_content(model=model_id, contents=[part, "Transcribe este audio hardware query."])
+                        t_res = client.models.generate_content(model=model_id, contents=[part, "Transcribe este audio técnico."])
                         if t_res and t_res.text: input_user = t_res.text
 
             # 📸 VISIÓN
@@ -53,19 +53,16 @@ async def generar_respuesta(input_user, historial):
                         v_res = client.models.generate_content(model=model_id, contents=[part, "Identifica esta pieza de ferretería."])
                         if v_res and v_res.text: ctx_img = f"\nFOTO: {v_res.text}"
 
-            # 🕵️‍♂️ BÚSQUEDA Y RESPUESTA
+            # 🕵️‍♂️ BÚSQUEDA LOCAL (Quitamos 'tools' para evitar Error 400 en V1)
             contexto_cat = buscar_en_el_catalogo(input_user)
-            # Solo usamos Google Search si no es una consulta simple de precio
-            tools = [types.Tool(google_search=types.GoogleSearch())]
-            config = types.GenerateContentConfig(tools=tools)
             
-            prompt_final = f"{system_prompt}\n{ctx_img}\nCATALOGO:\n{contexto_cat}\n\nCliente: {input_user}"
-            response = client.models.generate_content(model=model_id, contents=prompt_final, config=config)
+            prompt_final = f"{system_prompt}\n{ctx_img}\nCATALOGO LOCAL:\n{contexto_cat}\n\nCliente: {input_user}"
+            response = client.models.generate_content(model=model_id, contents=prompt_final)
             
             if response and response.text: return response.text
                 
         except Exception as e:
-            logger.error(f"Error Brain 11.10: {e}")
+            logger.error(f"Error Brain 11.11: {e}")
             continue
     
-    return "¡Hola genio! ¿En qué te asesoro hoy? (Estamos afinando el sistema técnico)"
+    return "¡Hola genio! ¿En qué te asesoro hoy en Ferretería El Indio?"
