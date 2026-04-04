@@ -1,4 +1,4 @@
-# agent/brain.py — El Indio 11.9 (AUTO-REINTENTO NIVEL DIOS) 🏹🛡️🦾💎✨🦾
+# agent/brain.py — El Indio 11.10 (RETORNO A LA ESTABILIDAD V1) 🏹🛡️🦾💎✨🦾
 import os, logging, sqlite3, httpx
 from google.genai import Client, types
 
@@ -22,50 +22,50 @@ def buscar_en_el_catalogo(consulta: str) -> str:
 
 raw_keys = os.getenv("GOOGLE_API_KEYS") or os.getenv("GOOGLE_API_KEY") or ""
 LISTA_LLAVES = [k.strip() for k in raw_keys.split(",") if k.strip()]
-MODELOS_A_PROBAR = ["gemini-1.5-flash", "gemini-1.5-flash-latest", "gemini-2.0-flash"]
 
 async def generar_respuesta(input_user, historial):
-    system_prompt = "Sos el experto de Ferretería El Indio (C. Lorenzini 1261). Ultra-conciso. Da consejos técnicos y busca precios."
+    system_prompt = "Sos el experto de Ferretería El Indio (C. Lorenzini 1261). Ultra-conciso y amable. Da consejos técnicos y busca precios."
     
     for api_key in LISTA_LLAVES:
-        client = Client(api_key=api_key)
-        for model_id in MODELOS_A_PROBAR:
-            try:
-                # 🎙️ AUDIO -> TEXTO
-                if "[AUDIO_LINK:" in input_user:
-                    url = input_user.split("[AUDIO_LINK:")[1].split("]")[0]
-                    async with httpx.AsyncClient() as h_client:
-                        resp = await h_client.get(url)
-                        if resp.status_code == 200:
-                            part = types.Part.from_bytes(data=resp.content, mime_type="audio/ogg")
-                            t_res = client.models.generate_content(model=model_id, contents=[part, "Transcribe este audio."])
-                            if t_res and t_res.text: input_user = t_res.text
+        try:
+            # 🏹 CLIENTE FORZADO A V1 (Más estable para Flash 1.5)
+            client = Client(api_key=api_key, http_options={'api_version': 'v1'})
+            model_id = "gemini-1.5-flash"
+            
+            # 🎙️ AUDIO -> TEXTO
+            if "[AUDIO_LINK:" in input_user:
+                url = input_user.split("[AUDIO_LINK:")[1].split("]")[0]
+                async with httpx.AsyncClient() as h_client:
+                    resp = await h_client.get(url)
+                    if resp.status_code == 200:
+                        part = types.Part.from_bytes(data=resp.content, mime_type="audio/ogg")
+                        t_res = client.models.generate_content(model=model_id, contents=[part, "Transcribe este audio hardware query."])
+                        if t_res and t_res.text: input_user = t_res.text
 
-                # 📸 VISIÓN
-                ctx_img = ""
-                if "[IMAGE_LINK:" in input_user:
-                    url = input_user.split("[IMAGE_LINK:")[1].split("]")[0]
-                    async with httpx.AsyncClient() as h_client:
-                        resp = await h_client.get(url)
-                        if resp.status_code == 200:
-                            part = types.Part.from_bytes(data=resp.content, mime_type="image/jpeg")
-                            v_res = client.models.generate_content(model=model_id, contents=[part, "Qué pieza es esta y danos el nombre exacto?"])
-                            if v_res and v_res.text: ctx_img = f"\nINFO FOTO: Es un {v_res.text}"
+            # 📸 VISIÓN
+            ctx_img = ""
+            if "[IMAGE_LINK:" in input_user:
+                url = input_user.split("[IMAGE_LINK:")[1].split("]")[0]
+                async with httpx.AsyncClient() as h_client:
+                    resp = await h_client.get(url)
+                    if resp.status_code == 200:
+                        part = types.Part.from_bytes(data=resp.content, mime_type="image/jpeg")
+                        v_res = client.models.generate_content(model=model_id, contents=[part, "Identifica esta pieza de ferretería."])
+                        if v_res and v_res.text: ctx_img = f"\nFOTO: {v_res.text}"
 
-                # 🕵️‍♂️ BÚSQUEDA Y RESPUESTA (Tools Fix)
-                contexto_cat = buscar_en_el_catalogo(input_user)
-                config = types.GenerateContentConfig(
-                    tools=[types.Tool(google_search=types.GoogleSearch())]
-                )
+            # 🕵️‍♂️ BÚSQUEDA Y RESPUESTA
+            contexto_cat = buscar_en_el_catalogo(input_user)
+            # Solo usamos Google Search si no es una consulta simple de precio
+            tools = [types.Tool(google_search=types.GoogleSearch())]
+            config = types.GenerateContentConfig(tools=tools)
+            
+            prompt_final = f"{system_prompt}\n{ctx_img}\nCATALOGO:\n{contexto_cat}\n\nCliente: {input_user}"
+            response = client.models.generate_content(model=model_id, contents=prompt_final, config=config)
+            
+            if response and response.text: return response.text
                 
-                # Sincronizamos con el mostrador virtual
-                prompt_final = f"{system_prompt}\n{ctx_img}\nDATOS LOCAL:\n{contexto_cat}\n\nCliente: {input_user}"
-                response = client.models.generate_content(model=model_id, contents=prompt_final, config=config)
-                
-                if response and response.text: return response.text
-                
-            except Exception as e:
-                logger.error(f"Error Brain 11.9 ({model_id}): {e}")
-                continue # Prueba el siguiente modelo
+        except Exception as e:
+            logger.error(f"Error Brain 11.10: {e}")
+            continue
     
-    return "¡Hola genio! ¿En qué te asesoro hoy? (Estamos procesando tu consulta técnica)"
+    return "¡Hola genio! ¿En qué te asesoro hoy? (Estamos afinando el sistema técnico)"
